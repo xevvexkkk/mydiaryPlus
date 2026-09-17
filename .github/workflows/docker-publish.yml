@@ -35,7 +35,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ vars.DOCKERHUB_USERNAME }}/mydiary
+          images: ${{ vars.DOCKERHUB_USERNAME }}/mydiaryplus
           tags: |
             type=sha,prefix=sha-
             type=semver,pattern={{version}}
