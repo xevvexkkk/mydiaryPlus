@@ -21,15 +21,9 @@ const handleSubmit = async () => {
   try {
     const endpoint = isLoginMode.value ? '/auth/login' : '/auth/register';
     const res = await api.post(endpoint, { username: username.value, password: password.value });
-    
-    if (isLoginMode.value) {
-      authStore.setAuth(res.data.user, res.data.token);
-      router.push('/');
-    } else {
-      isLoginMode.value = true;
-      errorMsg.value = '注册成功，请重新登录';
-      password.value = '';
-    }
+
+    authStore.setAuth(res.data.user);
+    router.push('/');
   } catch (err: any) {
     errorMsg.value = err.response?.data?.error || '请求失败，请重试';
   } finally {

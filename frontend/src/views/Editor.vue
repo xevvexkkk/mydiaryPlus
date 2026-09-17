@@ -165,10 +165,20 @@ const handleImageUpload = async (e: Event) => {
   (e.target as HTMLInputElement).value = '';
 };
 
-const removeImage = (url: string) => {
+const removeImage = async (url: string) => {
   uploadedImages.value = uploadedImages.value.filter(img => img !== url);
   const regex = new RegExp(`\\n?!\\[.*?\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\n?`, 'g');
   content.value = content.value.replace(regex, '');
+
+  // Call backend to soft-delete the attachment
+  const match = url.match(/\/api\/attachments\/([a-f0-9-]+)/);
+  if (match) {
+    try {
+      await api.delete(`/attachments/${match[1]}`);
+    } catch (err) {
+      console.error('Failed to delete attachment on server:', err);
+    }
+  }
 };
 
 const displayDate = computed(() => {

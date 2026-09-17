@@ -1,0 +1,80 @@
+# MyDiary NAS 部署配置
+# 适用于 AMD64 / ARM64 架构的 NAS 设备（群晖、威联通、Unraid 等）
+#
+# 使用方法:
+#   1. 在 NAS 上克隆仓库或复制 deploy/nas/ 目录到持久化位置:
+#      git clone https://github.com/your-org/mydiary.git /volume1/docker/mydiary
+#      cd /volume1/docker/mydiary/deploy/nas
+#   2. 创建目录和密钥文件:
+#      mkdir -p secrets postgres storage/attachments storage/exports backups
+#      echo 'your_strong_db_password' > secrets/db_password.txt
+#      echo 'your_strong_session_secret_at_least_32_chars' > secrets/session_secret.txt
+#   3. docker compose up -d
+
+name: mydiary
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: mydiary_db
+    restart: unless-stopped
+    # 不映射外部端口，仅内部访问
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: mydiary
+      POSTGRES_DB: mydiary
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    volumes:
+      - ./postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mydiary -d mydiary"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    secrets:
+      - db_password
+
+  app:
+    image: mydiary:1.0.0
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: mydiary_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: mydiary
+      DB_NAME: mydiary
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      JWT_SECRET_FILE: /run/secrets/session_secret
+      COOKIE_SECRET_FILE: /run/secrets/session_secret
+      CORS_ORIGINS: https://mydiary.your-nas-domain.com
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+      - ./storage/attachments:/app/storage/attachments
+      - ./storage/exports:/app/storage/exports
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    secrets:
+      - db_password
+      - session_secret
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  session_secret:
+    file: ./secrets/session_secret.txt

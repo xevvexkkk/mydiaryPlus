@@ -11,8 +11,8 @@ const route = useRoute();
 
 const isDrawerOpen = ref(false);
 
-const handleLogout = () => {
-  authStore.logout();
+const handleLogout = async () => {
+  await authStore.logout();
   isDrawerOpen.value = false;
   router.push('/login');
 };
@@ -88,7 +88,7 @@ const toggleDrawer = () => {
     </Transition>
 
     <!-- TopAppBar -->
-    <header v-if="authStore.token"
+    <header v-if="authStore.user"
         class="fixed top-0 w-full z-50 bg-[#fafaf5]/80 dark:bg-[#2e342d]/80 backdrop-blur-xl shadow-[0_24px_48px_rgba(46,52,45,0.06)] h-16 flex items-center justify-between px-6">
         <div class="flex items-center gap-4">
             <!-- Show Back button instead of Menu when in Editor -->
@@ -108,7 +108,7 @@ const toggleDrawer = () => {
         </button>
     </header>
 
-    <main :class="['w-full max-w-2xl mx-auto min-h-screen', authStore.token ? 'pt-24 pb-32 px-6' : 'p-6']">
+    <main :class="['w-full max-w-2xl mx-auto min-h-screen', authStore.user ? 'pt-24 pb-32 px-6' : 'p-6']">
       <router-view v-slot="{ Component }">
         <transition name="fade" mode="out-in">
           <component :is="Component" />
@@ -116,7 +116,7 @@ const toggleDrawer = () => {
       </router-view>
     </main>
 
-    <template v-if="authStore.token && !route.path.startsWith('/editor')">
+    <template v-if="authStore.user && !route.path.startsWith('/editor')">
       <!-- FAB -->
       <button @click="handleAddToday"
           class="fixed bottom-10 right-6 w-14 h-14 bg-gradient-to-br from-[#4c6455] to-[#6b8574] text-white rounded-2xl flex items-center justify-center shadow-2xl active:scale-90 transition-transform z-40">

@@ -26,15 +26,33 @@ const router = createRouter({
   },
 });
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore();
-  if (to.meta.requiresAuth && !authStore.token) {
-    next('/login');
-  } else if (to.path === '/login' && authStore.token) {
-    next('/');
-  } else {
+
+  // Skip session check on login page to avoid redirect loop
+  if (to.path === '/login') {
+    if (authStore.user) {
+      next('/');
+      return;
+    }
     next();
+    return;
   }
+
+  // For protected routes, try to fetch user if not already known
+  if (to.meta.requiresAuth && !authStore.user) {
+    try {
+      await authStore.fetchUser();
+    } catch {
+      // fetchUser failed silently; user remains null
+    }
+    if (!authStore.user) {
+      next('/login');
+      return;
+    }
+  }
+
+  next();
 });
 
 export default router;

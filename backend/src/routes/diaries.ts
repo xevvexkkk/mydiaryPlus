@@ -7,7 +7,7 @@ router.use(authenticate);
 
 // 获取月度日历概览数据 (格式: YYYY-MM)
 router.get('/month/:yearMonth', async (req: AuthRequest, res: Response): Promise<void> => {
-  const { yearMonth } = req.params;
+  const yearMonth = String(req.params.yearMonth || '');
   const userId = req.user?.userId;
   
   if (!/^\d{4}-\d{2}$/.test(yearMonth)) {

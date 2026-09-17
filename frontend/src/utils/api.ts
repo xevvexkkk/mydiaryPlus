@@ -1,24 +1,32 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api', // 改为相对路径，自动继承当前部署域名与端口
+  baseURL: '/api',
+  withCredentials: true, // Send cookies
 });
 
+// CSRF token handling: read XSRF-TOKEN cookie and set header for state-changing requests
+function getCsrfToken(): string | null {
+  const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token && config.headers) {
-    config.headers.Authorization = `Bearer ${token}`;
+  // Attach CSRF token for state-changing methods
+  if (config.method && !['get', 'head', 'options'].includes(config.method)) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken && config.headers) {
+      config.headers['X-CSRF-Token'] = csrfToken;
+    }
   }
   return config;
 });
 
-// 若响应遭遇 401 可以在此处理登出
+// Handle 401 by redirecting to login (but not if already there)
 api.interceptors.response.use(
   (res) => res,
   (error) => {
-    if (error.response && error.response.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+    if (error.response && error.response.status === 401 && !window.location.pathname.startsWith('/login')) {
       window.location.href = '/login';
     }
     return Promise.reject(error);

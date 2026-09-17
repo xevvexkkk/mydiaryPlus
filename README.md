@@ -62,11 +62,10 @@
 如果你希望使用 Docker 快速部署：
 
 1. 确保已安装 Docker 和 Docker Compose。
-2. 配置后端环境变量（请确保在 `.env` 中正确配置外部 PostgreSQL 数据库的连接信息）：
+2. 在项目根目录创建 Docker 环境文件，并将 `DB_PASSWORD` 和 `JWT_SECRET` 替换为强随机值：
    ```bash
-   cd backend
-   cp .env.example .env
-   cd ..
+   cp backend/.env.example .env
+   # 编辑 .env；JWT_SECRET 可使用 openssl rand -hex 64 生成
    ```
 3. 运行容器：
    ```bash
@@ -142,11 +141,10 @@ A personal diary application built with Vue 3, TypeScript, Tailwind CSS, Node.js
 If you prefer to deploy using Docker:
 
 1. Ensure Docker and Docker Compose are installed.
-2. Configure backend environment variables (make sure to set up the connection details for your external PostgreSQL database in `.env`):
+2. Create the Docker environment file at the repository root, then replace `DB_PASSWORD` and `JWT_SECRET` with strong random values:
    ```bash
-   cd backend
-   cp .env.example .env
-   cd ..
+   cp backend/.env.example .env
+   # Edit .env; generate JWT_SECRET with: openssl rand -hex 64
    ```
 3. Run the container:
    ```bash

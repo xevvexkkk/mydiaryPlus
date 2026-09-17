@@ -1,4 +1,10 @@
 backend/node_modules
 frontend/node_modules
 backend/.env
+.env
 uploads
+storage/
+postgres_data/
+deploy/nas/postgres/
+deploy/nas/secrets/
+deploy/nas/backups/

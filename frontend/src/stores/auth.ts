@@ -1,31 +1,31 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
+import api from '../utils/api';
 
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref<{ id: number; username: string } | null>(null);
-  const token = ref<string | null>(localStorage.getItem('token'));
+  const user = ref<{ id: number; username: string; isAdmin?: boolean } | null>(null);
 
-  // 初始化态同步
-  const storedUser = localStorage.getItem('user');
-  if (storedUser) {
+  const fetchUser = async () => {
     try {
-      user.value = JSON.parse(storedUser);
-    } catch {}
-  }
+      const res = await api.get('/auth/me');
+      user.value = res.data.user;
+    } catch {
+      user.value = null;
+    }
+  };
 
-  const setAuth = (newUser: { id: number; username: string }, newToken: string) => {
+  const setAuth = (newUser: { id: number; username: string; isAdmin?: boolean }) => {
     user.value = newUser;
-    token.value = newToken;
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('user', JSON.stringify(newUser));
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      // ignore
+    }
     user.value = null;
-    token.value = null;
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
   };
 
-  return { user, token, setAuth, logout };
+  return { user, fetchUser, setAuth, logout };
 });
