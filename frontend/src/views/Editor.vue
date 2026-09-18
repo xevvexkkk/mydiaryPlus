@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, onBeforeUnmount } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import api from '../utils/api';
-import { Plus, X, Loader2, CloudCheck, CloudUpload, CloudOff, AlertCircle } from 'lucide-vue-next';
+import { Plus, X, Loader2, CloudCheck, CloudUpload, CloudOff, AlertCircle, ChevronDown, Image as ImageIcon } from 'lucide-vue-next';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 
 const route = useRoute();
+const router = useRouter();
 const dateStr = route.params.date as string;
 
 const content = ref('');
@@ -14,6 +15,7 @@ const emoji = ref('📝');
 const uploadedImages = ref<string[]>([]);
 const selectedImageUrl = ref<string | null>(null);
 const loading = ref(false);
+const showMoodPicker = ref(false);
 
 // 同步状态：'synced' | 'syncing' | 'cached' | 'error'
 const syncStatus = ref<'synced' | 'syncing' | 'cached' | 'error'>('synced');
@@ -190,6 +192,22 @@ const displayDate = computed(() => {
   }
 });
 
+const displayWeekday = computed(() => {
+  try {
+    return format(new Date(dateStr), 'EEEE', { locale: zhCN });
+  } catch {
+    return '';
+  }
+});
+
+const wordCount = computed(() => content.value.trim() ? content.value.trim().length : 0);
+const syncLabel = computed(() => ({
+  synced: '已保存',
+  syncing: '保存中',
+  cached: '离线草稿',
+  error: '保存失败',
+})[syncStatus.value]);
+
 const updateOnlineStatus = () => {
   isOnline.value = navigator.onLine;
   if (isOnline.value && syncStatus.value === 'cached') {
@@ -210,171 +228,175 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#fafaf5] font-label pb-20 overflow-x-hidden">
-    <!-- Header Portal Content -->
+  <div class="editor-shell">
     <Teleport to="#app-header-center">
-      <div class="flex flex-col items-center">
-        <div class="flex items-center gap-1.5 leading-none">
-          <span class="font-label text-xs font-bold text-[#4c6455]">{{ displayDate }}</span>
-          <span class="w-1 h-1 rounded-full bg-[#4c6455]/20"></span>
-          <!-- Sync Status Indicator -->
-          <div class="flex items-center gap-1">
-            <template v-if="syncStatus === 'synced'">
-              <CloudCheck class="w-3.5 h-3.5 text-sage" />
-            </template>
-            <template v-else-if="syncStatus === 'syncing'">
-              <Loader2 class="w-3.5 h-3.5 text-sage animate-spin" />
-            </template>
-            <template v-else-if="syncStatus === 'cached'">
-              <CloudOff class="w-3.5 h-3.5 text-on-surface-variant/40" />
-            </template>
-            <template v-else-if="syncStatus === 'error'">
-              <AlertCircle class="w-3.5 h-3.5 text-red-400" />
-            </template>
-          </div>
-        </div>
-        <span class="font-label text-[9px] font-bold tracking-[0.2em] text-[#4c6455]/40 uppercase mt-0.5">数据已同步</span>
+      <div class="mobile-editor-status">
+        <strong>{{ displayDate }}</strong>
+        <span>{{ syncLabel }}</span>
       </div>
     </Teleport>
 
-    <div v-if="loading" class="flex justify-center items-center py-20">
-      <Loader2 class="w-8 h-8 text-sage animate-spin" />
-    </div>
+    <div v-if="loading" class="editor-loading"><Loader2 class="h-7 w-7 animate-spin" /></div>
 
-    <main v-else class="max-w-xl mx-auto px-6 pt-0 space-y-8 pb-32">
-      <!-- Restore Draft Modal (Floating Tip) -->
-      <Transition name="fade">
-        <div v-if="showRestoreModal" class="fixed top-24 left-1/2 -translate-x-1/2 z-[60] w-[calc(100%-3rem)] max-w-md bg-white border border-sage/20 rounded-2xl shadow-xl p-4 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
-          <div class="flex items-center gap-3">
-            <div class="p-2 bg-sage/10 rounded-full text-sage">
-              <CloudUpload class="w-5 h-5" />
-            </div>
-            <div>
-              <p class="text-sm font-bold text-on-surface">发现未同步草稿</p>
-              <p class="text-[11px] text-on-surface-variant/60">上次编辑的内容似乎还留在本地</p>
-            </div>
+    <template v-else>
+      <header class="editor-heading">
+        <div class="editor-title-group">
+          <button aria-label="返回" @click="router.back()">←</button>
+          <div>
+            <p class="eyebrow">{{ displayWeekday }}</p>
+            <h1>{{ displayDate }}</h1>
           </div>
-          <div class="flex gap-2">
-            <button @click="showRestoreModal = false" class="px-3 py-1.5 text-[11px] font-bold text-on-surface-variant/40 hover:text-on-surface transition-colors">忽略</button>
-            <button @click="restoreDraft" class="px-4 py-1.5 bg-sage text-white rounded-full text-[11px] font-bold shadow-sm shadow-sage/20 hover:bg-sage-light transition-all">恢复</button>
+        </div>
+        <div :class="['sync-state', syncStatus]">
+          <CloudCheck v-if="syncStatus === 'synced'" class="h-4 w-4" />
+          <Loader2 v-else-if="syncStatus === 'syncing'" class="h-4 w-4 animate-spin" />
+          <CloudOff v-else-if="syncStatus === 'cached'" class="h-4 w-4" />
+          <AlertCircle v-else class="h-4 w-4" />
+          {{ syncLabel }}
+        </div>
+      </header>
+
+      <Transition name="draft">
+        <div v-if="showRestoreModal" class="draft-notice">
+          <span><CloudUpload class="h-5 w-5" /></span>
+          <div>
+            <strong>发现一份本地草稿</strong>
+            <p>它可能包含尚未同步的内容。</p>
           </div>
+          <button @click="showRestoreModal = false">忽略</button>
+          <button class="restore" @click="restoreDraft">恢复草稿</button>
         </div>
       </Transition>
-      <!-- Mood Selector -->
-      <section class="flex items-center justify-between py-2 border-y border-outline/20 group relative">
-        <div class="relative">
-          <select v-model="emoji" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10 appearance-none">
-            <option v-for="e in emojis" :key="e" :value="e">{{ e }} {{ moodMap[e] }}</option>
-          </select>
-          <button class="flex items-center gap-2 px-4 py-1.5 rounded-full bg-sage/10 text-sage hover:bg-sage/20 transition-all">
-            <span class="text-lg">{{ emoji }}</span>
-            <span class="text-[11px] font-bold tracking-wider uppercase">{{ moodMap[emoji] }}</span>
-          </button>
-        </div>
-      </section>
 
-      <!-- Writing Area Only -->
-      <div class="space-y-6">
-        <!-- Editor Box -->
-        <article class="relative group">
-          <textarea 
-            v-model="content" 
-            class="w-full min-h-[400px] bg-transparent border-none p-0 font-body text-[1.35rem] leading-[1.8] text-on-surface outline-none focus:ring-0 resize-none transition-all placeholder:italic placeholder:text-on-surface-variant/20"
-            placeholder="今天感觉如何？让思绪自然流淌..."
-          ></textarea>
-        </article>
-      </div>
-
-      <!-- Visual Memory Gallery -->
-      <section class="space-y-4 pt-4">
-        <h3 class="font-label text-[10px] font-bold tracking-[0.15em] text-on-surface-variant/40 uppercase">视觉回忆</h3>
-        <div class="flex gap-3 overflow-x-auto hide-scrollbar pb-2">
-          <!-- Upload Button -->
-          <label class="flex-shrink-0 w-24 h-24 rounded-2xl border-2 border-dashed border-outline/50 hover:border-sage/40 hover:bg-sage/5 transition-all flex flex-col items-center justify-center text-on-surface-variant/40 hover:text-sage group cursor-pointer">
-            <Plus class="w-6 h-6 group-hover:scale-110 transition-transform" />
-            <input type="file" class="hidden" accept="image/*" @change="handleImageUpload" />
-          </label>
-          
-          <!-- Thumbnails -->
-          <div v-for="imgUrl in imagesInContent" :key="imgUrl" 
-            @click="selectedImageUrl = imgUrl"
-            class="flex-shrink-0 w-24 h-24 rounded-2xl overflow-hidden relative group shadow-sm border border-outline/10 cursor-zoom-in active:scale-95 transition-transform">
-            <img :src="imgUrl" alt="Memory" class="w-full h-full object-cover" />
-            <button @click.stop="removeImage(imgUrl)" class="absolute top-1.5 right-1.5 bg-black/40 backdrop-blur-md text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/80">
-              <X class="w-3 h-3" />
+      <main class="writing-paper surface-card">
+        <div class="writing-toolbar">
+          <div class="mood-control">
+            <button class="mood-trigger" @click="showMoodPicker = !showMoodPicker">
+              <span>{{ emoji }}</span>
+              <div><small>此刻心情</small><strong>{{ moodMap[emoji] }}</strong></div>
+              <ChevronDown class="h-4 w-4" />
             </button>
+            <Transition name="mood-pop">
+              <div v-if="showMoodPicker" class="mood-picker">
+                <p>选择今天的心情</p>
+                <button
+                  v-for="item in emojis"
+                  :key="item"
+                  :class="{ selected: emoji === item }"
+                  :title="moodMap[item]"
+                  @click="emoji = item; showMoodPicker = false"
+                >
+                  <span>{{ item }}</span><small>{{ moodMap[item] }}</small>
+                </button>
+              </div>
+            </Transition>
           </div>
+          <span class="word-count">{{ wordCount }} 字</span>
         </div>
-      </section>
-    </main>
 
-    <!-- Simple Navigation (Hidden on Editor) -->
+        <textarea
+          v-model="content"
+          class="diary-textarea"
+          placeholder="今天发生了什么？&#10;&#10;从一个瞬间、一句话，或一种感受开始……"
+        ></textarea>
 
-    <!-- Image Lightbox -->
-    <Transition name="scale">
-      <div v-if="selectedImageUrl" 
-        class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-10 bg-neutral-soft/60 backdrop-blur-xl"
-        @click="selectedImageUrl = null">
-        
-        <div class="relative max-w-5xl w-full h-full flex items-center justify-center pointer-events-none">
-          <img :src="selectedImageUrl" 
-            class="max-w-full max-h-full object-contain rounded-3xl shadow-2xl pointer-events-auto" 
-            @click.stop />
-          
-          <button @click="selectedImageUrl = null" 
-            class="absolute top-0 right-0 sm:-top-12 sm:-right-12 p-3 bg-white/50 hover:bg-white border border-outline/20 rounded-full text-on-surface transition-all pointer-events-auto shadow-lg backdrop-blur-md">
-            <X class="w-6 h-6" />
-          </button>
-        </div>
+        <section class="memory-gallery">
+          <div class="gallery-heading">
+            <div><ImageIcon class="h-4 w-4" /><span>照片记忆</span></div>
+            <small>{{ imagesInContent.length ? `${imagesInContent.length} 张` : '添加今天的画面' }}</small>
+          </div>
+          <div class="gallery-strip hide-scrollbar">
+            <label class="upload-tile">
+              <span><Plus class="h-5 w-5" /></span>
+              <small>添加照片</small>
+              <input type="file" class="hidden" accept="image/*" @change="handleImageUpload" />
+            </label>
+            <div v-for="imgUrl in imagesInContent" :key="imgUrl" class="image-tile" @click="selectedImageUrl = imgUrl">
+              <img :src="imgUrl" alt="日记照片" />
+              <button aria-label="删除照片" @click.stop="removeImage(imgUrl)"><X class="h-3.5 w-3.5" /></button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </template>
+
+    <Transition name="lightbox">
+      <div v-if="selectedImageUrl" class="lightbox" @click="selectedImageUrl = null">
+        <img :src="selectedImageUrl" alt="照片预览" @click.stop />
+        <button aria-label="关闭预览" @click="selectedImageUrl = null"><X class="h-5 w-5" /></button>
       </div>
     </Transition>
   </div>
 </template>
 
 <style scoped>
-.font-body {
-  font-family: 'Newsreader', serif;
-}
-.font-label {
-  font-family: 'Manrope', sans-serif;
-}
-.font-headline {
-  font-family: 'Manrope', sans-serif;
-}
-
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.hide-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-/* Base prose cleanup if tailwind-typography not acting fully */
-:deep(.prose) {
-  color: #2D332F;
-}
-:deep(.prose p) {
-  margin-top: 1.5em;
-  margin-bottom: 1.5em;
-  line-height: 1.8;
-}
-:deep(.prose img) {
-  max-width: 100%;
-  height: auto;
-  margin: 2rem 0;
-}
-
-/* Lightbox Transitions */
-.scale-enter-active,
-.scale-leave-active {
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.scale-enter-from,
-.scale-leave-to {
-  opacity: 0;
-  backdrop-filter: blur(0px);
-  transform: scale(1.1);
+.editor-shell { max-width: 780px; margin: 0 auto; }
+.mobile-editor-status strong { display: block; overflow: hidden; text-overflow: ellipsis; color: #405147; font-size: .72rem; white-space: nowrap; }
+.mobile-editor-status span { display: block; margin-top: .1rem; color: #959d97; font-size: .55rem; }
+.editor-loading { display: grid; min-height: 55vh; place-items: center; color: #607566; }
+.editor-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 1.5rem; }
+.editor-title-group { display: flex; align-items: center; gap: .8rem; }
+.editor-title-group > button { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 11px; color: #748078; font-size: 1rem; transition: .2s; }
+.editor-title-group > button:hover { background: #e9ede7; color: #405147; }
+.editor-heading h1 { margin-top: .35rem; font-family: Georgia, "Songti SC", serif; font-size: 2rem; font-weight: 600; letter-spacing: -.035em; color: #2d3931; }
+.sync-state { display: flex; align-items: center; gap: .4rem; border: 1px solid rgba(255,255,255,.72); border-radius: 999px; padding: .45rem .7rem; background: rgba(255,255,255,.4); color: #728078; font-size: .62rem; font-weight: 600; box-shadow: inset 0 1px 0 rgba(255,255,255,.88), 0 9px 24px rgba(48,66,53,.07); backdrop-filter: blur(16px) saturate(150%); }
+.sync-state.error { border-color: #f0ccc7; color: #ad554e; }
+.sync-state.cached { color: #8a8171; }
+.draft-notice { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: .75rem; margin-bottom: 1rem; border: 1px solid rgba(255,255,255,.72); border-radius: 18px; padding: .8rem; background: linear-gradient(145deg, rgba(242,249,242,.62), rgba(255,255,255,.32)); box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 14px 36px rgba(48,61,52,.09); backdrop-filter: blur(22px) saturate(155%); }
+.draft-notice > span { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid rgba(255,255,255,.72); border-radius: 11px; background: rgba(255,255,255,.48); color: #58705f; box-shadow: inset 0 1px 0 rgba(255,255,255,.9); }
+.draft-notice strong { display: block; color: #405047; font-size: .72rem; }
+.draft-notice p { margin-top: .15rem; color: #89938c; font-size: .6rem; }
+.draft-notice button { padding: .5rem .65rem; color: #7c8880; font-size: .62rem; font-weight: 700; }
+.draft-notice button.restore { border-radius: 9px; background: #486451; color: white; }
+.writing-paper { overflow: visible; min-height: 650px; padding: 1.4rem clamp(1.25rem, 5vw, 3.5rem) 1.7rem; background: rgba(255,254,249,.93); border-color: rgba(255,255,255,.86); box-shadow: inset 0 1px 0 white, 0 22px 60px rgba(48,61,52,.1); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.writing-toolbar { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eceee9; padding-bottom: 1rem; }
+.mood-control { position: relative; }
+.mood-trigger { display: flex; align-items: center; gap: .7rem; border-radius: 12px; padding: .4rem .5rem; text-align: left; transition: .2s; }
+.mood-trigger:hover { background: rgba(231,239,231,.62); box-shadow: inset 0 1px 0 rgba(255,255,255,.8); }
+.mood-trigger > span { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid rgba(255,255,255,.75); border-radius: 11px; background: linear-gradient(145deg, rgba(240,246,239,.78), rgba(255,255,255,.55)); box-shadow: inset 0 1px 0 rgba(255,255,255,.94), 0 7px 16px rgba(50,70,55,.06); font-size: 1.15rem; }
+.mood-trigger div { min-width: 65px; }
+.mood-trigger small { display: block; color: #9aa19c; font-size: .52rem; }
+.mood-trigger strong { display: block; margin-top: .1rem; color: #536158; font-size: .68rem; }
+.mood-trigger > svg { color: #a0a7a2; }
+.word-count { color: #a1a7a2; font-size: .6rem; }
+.mood-picker { position: absolute; top: calc(100% + .6rem); left: 0; z-index: 20; display: grid; width: 300px; grid-template-columns: repeat(4, 1fr); gap: .35rem; border: 1px solid rgba(255,255,255,.8); border-radius: 19px; padding: .8rem; background: linear-gradient(145deg, rgba(255,255,255,.72), rgba(244,249,244,.52)); box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 22px 55px rgba(44,58,48,.18); backdrop-filter: blur(26px) saturate(165%); }
+.mood-picker p { grid-column: 1 / -1; margin-bottom: .3rem; color: #859087; font-size: .6rem; font-weight: 700; }
+.mood-picker button { display: flex; flex-direction: column; align-items: center; gap: .2rem; border-radius: 10px; padding: .45rem .2rem; transition: .15s; }
+.mood-picker button:hover, .mood-picker button.selected { background: rgba(255,255,255,.52); box-shadow: inset 0 1px 0 rgba(255,255,255,.85); }
+.mood-picker button span { font-size: 1.05rem; }
+.mood-picker button small { color: #7e8981; font-size: .52rem; }
+.diary-textarea { display: block; width: 100%; min-height: 410px; resize: none; border: 0; outline: 0; padding: 2rem 0; background: transparent; color: #374139; font-family: Georgia, "Songti SC", "STSong", serif; font-size: 1.08rem; line-height: 2; }
+.diary-textarea::placeholder { color: #b3b8b3; font-style: italic; }
+.memory-gallery { border-top: 1px solid #eceee9; padding-top: 1rem; }
+.gallery-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: .8rem; }
+.gallery-heading > div { display: flex; align-items: center; gap: .45rem; color: #65726a; font-size: .65rem; font-weight: 700; }
+.gallery-heading small { color: #a0a7a2; font-size: .55rem; }
+.gallery-strip { display: flex; gap: .65rem; overflow-x: auto; padding-bottom: .2rem; }
+.upload-tile, .image-tile { flex: 0 0 92px; width: 92px; height: 92px; border-radius: 14px; }
+.upload-tile { display: flex; cursor: pointer; flex-direction: column; align-items: center; justify-content: center; gap: .45rem; border: 1px dashed #cbd3cc; color: #859188; transition: .2s; }
+.upload-tile:hover { border-color: #91a395; background: rgba(233,240,233,.55); color: #506858; }
+.upload-tile span { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid rgba(255,255,255,.72); border-radius: 9px; background: rgba(255,255,255,.5); box-shadow: inset 0 1px 0 rgba(255,255,255,.88); }
+.upload-tile small { font-size: .55rem; font-weight: 600; }
+.image-tile { position: relative; cursor: zoom-in; overflow: hidden; background: #eef0eb; }
+.image-tile img { width: 100%; height: 100%; object-fit: cover; transition: transform .25s; }
+.image-tile:hover img { transform: scale(1.04); }
+.image-tile button { position: absolute; top: .35rem; right: .35rem; display: grid; width: 25px; height: 25px; place-items: center; border-radius: 8px; background: rgba(26,32,28,.55); color: white; opacity: 0; backdrop-filter: blur(5px); transition: .2s; }
+.image-tile:hover button, .image-tile button:focus { opacity: 1; }
+.lightbox { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 3rem; background: rgba(28,34,30,.72); backdrop-filter: blur(16px); }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 18px; box-shadow: 0 25px 80px rgba(0,0,0,.3); }
+.lightbox button { position: fixed; top: 1.5rem; right: 1.5rem; display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; background: rgba(255,255,255,.16); color: white; }
+.mood-pop-enter-active, .mood-pop-leave-active, .draft-enter-active, .draft-leave-active, .lightbox-enter-active, .lightbox-leave-active { transition: all .2s ease; }
+.mood-pop-enter-from, .mood-pop-leave-to { opacity: 0; transform: translateY(-5px) scale(.98); }
+.draft-enter-from, .draft-leave-to { opacity: 0; transform: translateY(-5px); }
+.lightbox-enter-from, .lightbox-leave-to { opacity: 0; }
+@media (max-width: 640px) {
+  .editor-heading { display: none; }
+  .writing-paper { min-height: calc(100vh - 7rem); margin: -.5rem; border-radius: 20px; padding-inline: 1.25rem; }
+  .diary-textarea { min-height: 52vh; font-size: 1rem; }
+  .mood-picker { width: min(300px, calc(100vw - 3rem)); }
+  .draft-notice { grid-template-columns: auto 1fr auto; }
+  .draft-notice > button:not(.restore) { display: none; }
+  .lightbox { padding: 1rem; }
+  .image-tile button { opacity: 1; }
 }
 </style>

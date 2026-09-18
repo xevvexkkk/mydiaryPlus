@@ -10,6 +10,7 @@ import {
   ALLOWED_EXTENSIONS,
   ALLOWED_MIME_TYPES,
   generateStorageKey,
+  normalizeOriginalName,
   validateMagicBytes,
   computeSha256,
 } from '../attachmentUtils';
@@ -66,7 +67,8 @@ router.post('/image', (req: AuthRequest, res: Response): void => {
     }
 
     const tmpPath = req.file.path;
-    const ext = path.extname(req.file.originalname).toLowerCase();
+    const originalName = normalizeOriginalName(req.file.originalname);
+    const ext = path.extname(originalName).toLowerCase();
 
     try {
       if (!validateMagicBytes(tmpPath, req.file.mimetype)) {
@@ -91,7 +93,7 @@ router.post('/image', (req: AuthRequest, res: Response): void => {
           `INSERT INTO tb_attachments (user_id, storage_key, original_name, mime_type, size_bytes, sha256)
            VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING id`,
-          [req.user!.userId, storageKey, req.file.originalname, req.file.mimetype, req.file.size, sha256]
+          [req.user!.userId, storageKey, originalName, req.file.mimetype, req.file.size, sha256]
         );
         attachmentId = rows[0].id;
       } catch (dbErr) {

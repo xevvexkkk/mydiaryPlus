@@ -1,15 +1,32 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useAuthStore } from './stores/auth';
 import { useRouter, useRoute } from 'vue-router';
 import { format } from 'date-fns';
-import { LayoutDashboard, Search, LogOut, X, Menu, Plus, ArrowLeft } from 'lucide-vue-next';
+import {
+  BookHeart,
+  CalendarDays,
+  Search,
+  LogOut,
+  X,
+  Menu,
+  Plus,
+  ArrowLeft,
+  Feather,
+  ShieldCheck,
+} from 'lucide-vue-next';
 
 const authStore = useAuthStore();
 const router = useRouter();
 const route = useRoute();
-
 const isDrawerOpen = ref(false);
+
+const isEditor = computed(() => route.path.startsWith('/editor'));
+
+const navigateTo = (path: string) => {
+  router.push(path);
+  isDrawerOpen.value = false;
+};
 
 const handleLogout = async () => {
   await authStore.logout();
@@ -18,134 +35,128 @@ const handleLogout = async () => {
 };
 
 const handleAddToday = () => {
-  const today = format(new Date(), 'yyyy-MM-dd');
-  router.push(`/editor/${today}`);
-};
-
-const goHome = () => {
-  router.push('/');
-  isDrawerOpen.value = false;
-};
-
-const goSearch = () => {
-  router.push('/search');
-  isDrawerOpen.value = false;
-};
-
-const toggleDrawer = () => {
-  isDrawerOpen.value = !isDrawerOpen.value;
+  router.push(`/editor/${format(new Date(), 'yyyy-MM-dd')}`);
 };
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#fafaf5] dark:bg-[#2e342d] overflow-x-hidden">
-    <!-- Drawer Overlay -->
+  <div class="app-shell">
     <Transition name="fade-overlay">
-      <div v-if="isDrawerOpen" 
-        class="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100]"
-        @click="isDrawerOpen = false"></div>
+      <button
+        v-if="isDrawerOpen"
+        class="fixed inset-0 z-[90] bg-[#252b27]/30 backdrop-blur-sm lg:hidden"
+        aria-label="关闭菜单"
+        @click="isDrawerOpen = false"
+      ></button>
     </Transition>
 
-    <!-- Side Drawer -->
-    <Transition name="slide">
-      <aside v-if="isDrawerOpen" 
-        class="fixed inset-y-0 left-0 w-64 bg-white dark:bg-[#1a1c1e] z-[101] shadow-2xl p-6 flex flex-col gap-8">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="font-headline font-bold text-lg text-[#4c6455] dark:text-[#cee9d6] uppercase tracking-widest opacity-40">菜单选项</h2>
-          <button @click="isDrawerOpen = false" class="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-colors">
-            <X class="w-5 h-5 text-on-surface-variant" />
-          </button>
-        </div>
-
-        <nav class="flex flex-col gap-2">
-          <button @click="goHome" 
-            :class="['flex items-center gap-4 p-4 rounded-2xl transition-all font-bold', 
-                    route.path === '/' ? 'bg-[#4c6455]/10 text-[#4c6455]' : 'hover:bg-slate-50 text-on-surface-variant']">
-            <LayoutDashboard class="w-5 h-5" />
-            <span>日记首页</span>
-          </button>
-          
-          <button @click="goSearch" 
-            :class="['flex items-center gap-4 p-4 rounded-2xl transition-all font-bold', 
-                    route.path === '/search' ? 'bg-[#4c6455]/10 text-[#4c6455]' : 'hover:bg-slate-50 text-on-surface-variant']">
-            <Search class="w-5 h-5" />
-            <span>搜索回忆</span>
-          </button>
-
-          <div class="h-px bg-outline/10 my-4"></div>
-
-          <button @click="handleLogout" 
-            class="flex items-center gap-4 p-4 rounded-2xl transition-all font-bold text-red-500 hover:bg-red-50">
-            <LogOut class="w-5 h-5" />
-            <span>退出登录</span>
-          </button>
-        </nav>
-
-        <div class="mt-auto py-4 text-center border-t border-slate-50 dark:border-white/5">
-          <p class="text-[10px] text-on-surface-variant/30 uppercase tracking-[0.2em]">The Digital Sanctuary</p>
-        </div>
-      </aside>
-    </Transition>
-
-    <!-- TopAppBar -->
-    <header v-if="authStore.user"
-        class="fixed top-0 w-full z-50 bg-[#fafaf5]/80 dark:bg-[#2e342d]/80 backdrop-blur-xl shadow-[0_24px_48px_rgba(46,52,45,0.06)] h-16 flex items-center justify-between px-6">
-        <div class="flex items-center gap-4">
-            <!-- Show Back button instead of Menu when in Editor -->
-            <button v-if="route.path.startsWith('/editor')" @click="router.back()" class="text-[#4c6455] active:scale-95 duration-200 hover:bg-[#f3f4ee] p-2 rounded-full">
-              <ArrowLeft class="w-6 h-6" />
-            </button>
-            <button v-else @click="toggleDrawer" class="text-[#4c6455] active:scale-95 duration-200 hover:bg-[#f3f4ee] p-2 rounded-full">
-              <Menu class="w-6 h-6" />
-            </button>
-        </div>
-        
-        <!-- Portal for child components to inject header content -->
-        <div id="app-header-center" class="flex-1 flex justify-center overflow-hidden"></div>
-
-        <button v-if="route.path !== '/search'" class="text-[#4c6455] active:scale-95 duration-200 hover:bg-[#f3f4ee] p-2 rounded-full" @click="goSearch">
-          <Search class="w-6 h-6" />
+    <aside
+      v-if="authStore.user"
+      :class="[
+        'app-sidebar',
+        isDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+      ]"
+    >
+      <div class="flex items-center justify-between">
+        <button class="brand-mark" @click="navigateTo('/')">
+          <span class="brand-icon"><BookHeart class="h-5 w-5" /></span>
+          <span>
+            <strong>MyDiary</strong>
+            <small>只属于你的片刻</small>
+          </span>
         </button>
-    </header>
+        <button class="icon-button lg:hidden" aria-label="关闭菜单" @click="isDrawerOpen = false">
+          <X class="h-5 w-5" />
+        </button>
+      </div>
 
-    <main :class="['w-full max-w-2xl mx-auto min-h-screen', authStore.user ? 'pt-24 pb-32 px-6' : 'p-6']">
-      <router-view v-slot="{ Component }">
-        <transition name="fade" mode="out-in">
-          <component :is="Component" />
-        </transition>
-      </router-view>
-    </main>
-
-    <template v-if="authStore.user && !route.path.startsWith('/editor')">
-      <!-- FAB -->
-      <button @click="handleAddToday"
-          class="fixed bottom-10 right-6 w-14 h-14 bg-gradient-to-br from-[#4c6455] to-[#6b8574] text-white rounded-2xl flex items-center justify-center shadow-2xl active:scale-90 transition-transform z-40">
-          <Plus class="w-8 h-8" />
+      <button class="new-entry-button" @click="handleAddToday">
+        <Plus class="h-5 w-5" />
+        记录今天
       </button>
-    </template>
+
+      <nav class="sidebar-nav" aria-label="主菜单">
+        <p class="nav-caption">我的空间</p>
+        <button :class="{ active: route.path === '/' }" @click="navigateTo('/')">
+          <CalendarDays class="h-[18px] w-[18px]" />
+          <span>日记</span>
+        </button>
+        <button :class="{ active: route.path === '/search' }" @click="navigateTo('/search')">
+          <Search class="h-[18px] w-[18px]" />
+          <span>搜索</span>
+        </button>
+      </nav>
+
+      <div class="privacy-note">
+        <ShieldCheck class="h-5 w-5" />
+        <div>
+          <strong>私密且由你掌控</strong>
+          <p>记录仅保存在你的服务中</p>
+        </div>
+      </div>
+
+      <div class="sidebar-user">
+        <span class="user-avatar">{{ authStore.user.username.slice(0, 1).toUpperCase() }}</span>
+        <div class="min-w-0 flex-1">
+          <strong class="block truncate">{{ authStore.user.username }}</strong>
+          <span>{{ authStore.user.isAdmin ? '管理员' : '日记主人' }}</span>
+        </div>
+        <button class="icon-button" title="退出登录" aria-label="退出登录" @click="handleLogout">
+          <LogOut class="h-[18px] w-[18px]" />
+        </button>
+      </div>
+    </aside>
+
+    <div :class="['app-content', authStore.user && 'lg:pl-[272px]']">
+      <header v-if="authStore.user" class="mobile-header lg:hidden">
+        <button v-if="isEditor" class="icon-button" aria-label="返回" @click="router.back()">
+          <ArrowLeft class="h-5 w-5" />
+        </button>
+        <button v-else class="icon-button" aria-label="打开菜单" @click="isDrawerOpen = true">
+          <Menu class="h-5 w-5" />
+        </button>
+
+        <div id="app-header-center" class="min-w-0 flex-1 text-center">
+          <span v-if="!isEditor" class="flex items-center justify-center gap-2 font-semibold">
+            <Feather class="h-4 w-4 text-primary" /> MyDiary
+          </span>
+        </div>
+
+        <button class="icon-button" aria-label="搜索" @click="navigateTo('/search')">
+          <Search class="h-5 w-5" />
+        </button>
+      </header>
+
+      <main :class="['page-container', authStore.user ? 'authenticated' : 'guest', isEditor && 'editor-page']">
+        <router-view v-slot="{ Component }">
+          <transition name="page-fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
+      </main>
+    </div>
+
+    <nav v-if="authStore.user && !isEditor" class="mobile-tabbar lg:hidden" aria-label="移动端导航">
+      <button :class="{ active: route.path === '/' }" @click="navigateTo('/')">
+        <CalendarDays class="h-5 w-5" /><span>日记</span>
+      </button>
+      <button class="mobile-compose" aria-label="记录今天" @click="handleAddToday">
+        <Plus class="h-6 w-6" />
+      </button>
+      <button :class="{ active: route.path === '/search' }" @click="navigateTo('/search')">
+        <Search class="h-5 w-5" /><span>搜索</span>
+      </button>
+    </nav>
   </div>
 </template>
 
 <style>
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
-  transform: translateY(10px);
-}
-
-.fade-overlay-enter-active, .fade-overlay-leave-active {
-  transition: opacity 0.3s ease;
-}
-.fade-overlay-enter-from, .fade-overlay-leave-to {
-  opacity: 0;
-}
-
-.slide-enter-active, .slide-leave-active {
-  transition: transform 0.3s cubic-bezier(0, 0, 0.2, 1);
-}
-.slide-enter-from, .slide-leave-to {
-  transform: translateX(-100%);
-}
+.page-fade-enter-active,
+.page-fade-leave-active { transition: opacity 180ms ease, transform 180ms ease; }
+.page-fade-enter-from,
+.page-fade-leave-to { opacity: 0; transform: translateY(5px); }
+.fade-overlay-enter-active,
+.fade-overlay-leave-active { transition: opacity 200ms ease; }
+.fade-overlay-enter-from,
+.fade-overlay-leave-to { opacity: 0; }
 </style>

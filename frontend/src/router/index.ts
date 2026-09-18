@@ -15,6 +15,11 @@ const router = createRouter({
       component: () => import('../views/Editor.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/diary/:date',
+      component: () => import('../views/DiaryDetail.vue'),
+      meta: { requiresAuth: true }
+    },
     { 
       path: '/search', 
       component: () => import('../views/Search.vue'),
@@ -26,16 +31,14 @@ const router = createRouter({
   },
 });
 
-router.beforeEach(async (to, _from, next) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore();
 
   // Skip session check on login page to avoid redirect loop
   if (to.path === '/login') {
     if (authStore.user) {
-      next('/');
-      return;
+      return '/';
     }
-    next();
     return;
   }
 
@@ -47,12 +50,9 @@ router.beforeEach(async (to, _from, next) => {
       // fetchUser failed silently; user remains null
     }
     if (!authStore.user) {
-      next('/login');
-      return;
+      return '/login';
     }
   }
-
-  next();
 });
 
 export default router;

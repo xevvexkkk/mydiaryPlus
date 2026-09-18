@@ -32,6 +32,21 @@ export function generateStorageKey(ext: string): string {
 }
 
 /**
+ * Browsers send multipart filenames as UTF-8, while Busboy/Multer may expose
+ * those bytes as Latin-1. Repair that mojibake only when the conversion is a
+ * valid, reversible UTF-8 sequence so genuine Latin-1 names remain unchanged.
+ */
+export function normalizeOriginalName(name: string): string {
+  if (!/[^\x00-\x7f]/.test(name)) return name;
+
+  const decoded = Buffer.from(name, 'latin1').toString('utf8');
+  if (decoded.includes('\uFFFD')) return name;
+
+  const roundTrip = Buffer.from(decoded, 'utf8').toString('latin1');
+  return roundTrip === name ? decoded : name;
+}
+
+/**
  * Validate file content matches its declared MIME type using magic bytes.
  */
 export function validateMagicBytes(filePath: string, mimeType: string): boolean {

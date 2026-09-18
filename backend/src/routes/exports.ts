@@ -4,6 +4,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { pool } from '../db';
+import { normalizeOriginalName } from '../attachmentUtils';
 
 const router = Router();
 router.use(authenticate);
@@ -49,6 +50,24 @@ function safeExportName(name: string): string {
   const basename = path.basename(name.replace(/\\/g, '/'));
   const sanitized = basename.replace(/[\x00-\x1f\x7f/\\]/g, '_').trim();
   return sanitized || 'attachment';
+}
+
+function parseImageUrls(value: unknown): string[] {
+  let parsed = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((item): item is string => typeof item === 'string');
+}
+
+function markdownAltText(value: string): string {
+  return value.replace(/[\[\]\r\n]/g, '').trim() || 'Image';
 }
 
 /**
@@ -102,7 +121,8 @@ function buildUrlToLocal(
       String(att.storage_key),
       `attachment ${att.id}`
     );
-    const destName = `${att.id}-${safeExportName(String(att.original_name))}`;
+    const originalName = normalizeOriginalName(String(att.original_name));
+    const destName = `${att.id}-${safeExportName(originalName)}`;
     fs.copyFileSync(srcPath, path.join(mediaDir, destName));
     urlToLocal[`/api/attachments/${att.id}`] = `media/${destName}`;
   }
@@ -120,10 +140,7 @@ function buildUrlToLocal(
     }
 
     // Also handle images stored in the images JSONB array
-    let images: string[] = [];
-    try {
-      images = typeof entry.images === 'string' ? JSON.parse(entry.images) : (entry.images || []);
-    } catch { /* ignore */ }
+    const images = parseImageUrls(entry.images);
     for (const imgUrl of images) {
       if (imgUrl.startsWith('/uploads/') && !urlToLocal[imgUrl]) {
         const relativePath = imgUrl.slice('/uploads/'.length);
@@ -267,15 +284,18 @@ async function processExport(jobId: string, userId: number): Promise<void> {
   try {
     // 4. Build URL mapping FIRST (copy files, determine local paths)
     const urlToLocal = buildUrlToLocal(attachments, entries, mediaDir);
+    const attachmentNameByUrl = new Map<string, string>(
+      attachments.map(att => [
+        `/api/attachments/${att.id}`,
+        normalizeOriginalName(String(att.original_name)),
+      ])
+    );
 
     // 5. Write entries.json (with rewritten image URLs)
     const entriesData = entries.map(e => {
       let content = rewriteUrls(e.content, urlToLocal);
       // Rewrite images array too
-      let images: string[] = [];
-      try {
-        images = typeof e.images === 'string' ? JSON.parse(e.images) : (e.images || []);
-      } catch { /* ignore */ }
+      const images = parseImageUrls(e.images);
       const rewrittenImages = images.map(img => urlToLocal[img] || img);
 
       return {
@@ -313,8 +333,29 @@ async function processExport(jobId: string, userId: number): Promise<void> {
         mdContent = mdContent.replace(new RegExp(escapeRegex(apiUrl), 'g'), relPath);
       }
 
+      // The editor stores newly uploaded images in the JSONB images array,
+      // separate from Markdown content. Append those images so each Markdown
+      // file remains independently readable after extraction.
+      const imageLines = Array.from(new Set(parseImageUrls(entry.images)))
+        .filter(imageUrl => {
+          if (!urlToLocal[imageUrl]) return false;
+          const embeddedPattern = new RegExp(
+            `!\\[[^\\]]*\\]\\(${escapeRegex(imageUrl)}\\)`
+          );
+          return !embeddedPattern.test(entry.content);
+        })
+        .map((imageUrl, index) => {
+          const localPath = relPrefix + urlToLocal[imageUrl];
+          const originalName = attachmentNameByUrl.get(imageUrl) || `Image ${index + 1}`;
+          return `![${markdownAltText(originalName)}](<${localPath}>)`;
+        });
+
+      if (imageLines.length > 0) {
+        mdContent = `${mdContent.trimEnd()}\n\n## Images\n\n${imageLines.join('\n\n')}\n`;
+      }
+
       const moodLine = entry.mood_emoji ? `> Mood: ${entry.mood_emoji}\n\n` : '';
-      mdContent = `# ${entry.date}\n\n${moodLine}${mdContent}\n`;
+      mdContent = `# ${entry.date}\n\n${moodLine}${mdContent.trimEnd()}\n`;
       fs.writeFileSync(path.join(mdDir, `${entry.date}.md`), mdContent, 'utf8');
     }
 

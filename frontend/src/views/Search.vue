@@ -1,22 +1,33 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { format, parseISO } from 'date-fns';
+import { zhCN } from 'date-fns/locale';
 import api from '../utils/api';
-import { ArrowLeft, Loader2, Frown, CalendarDays, Search as SearchIcon } from 'lucide-vue-next';
+import { ArrowRight, Feather, Loader2, Search as SearchIcon, X } from 'lucide-vue-next';
+
+interface SearchResult {
+  id: number;
+  date: string;
+  content: string;
+  mood_emoji: string;
+  images?: string[];
+}
 
 const route = useRoute();
 const router = useRouter();
-const results = ref<any[]>([]);
+const results = ref<SearchResult[]>([]);
 const loading = ref(false);
 const searchQuery = ref((route.query.q as string) || '');
 
 const handleSearch = () => {
   const q = searchQuery.value.trim();
-  if (q) {
-    router.replace({ path: '/search', query: { q } });
-  } else {
-    router.replace({ path: '/search' });
-  }
+  router.replace(q ? { path: '/search', query: { q } } : { path: '/search' });
+};
+
+const clearSearch = () => {
+  searchQuery.value = '';
+  router.replace('/search');
 };
 
 const fetchResults = async (q: string) => {
@@ -35,91 +46,131 @@ const fetchResults = async (q: string) => {
   }
 };
 
-watch(() => route.query.q, (newQ) => {
-  searchQuery.value = (newQ as string) || '';
-  fetchResults(newQ as string);
-});
-
-onMounted(() => {
-  fetchResults(route.query.q as string);
-});
-
-// 纯文本摘要提取，并简易标注高亮
-const getPreview = (content: string, q: string) => {
-  if (!content) return '';
-  let stripped = content.replace(/[#*`_>\[\]]/g, '').slice(0, 150) + '...';
-  if (!q) return stripped;
-  
-  // 安全地利用正则分割，防被注入
-  const regex = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-  return stripped.replace(regex, '<span class="bg-yellow-200 text-yellow-900 px-1 py-0.5 rounded font-medium">$1</span>');
+const previewParts = (content: string, query: string) => {
+  const plain = (content || '')
+    .replace(/!\[.*?\]\(.*?\)/g, '')
+    .replace(/[#*`_>\[\]]/g, '')
+    .replace(/<[^>]*>/g, '')
+    .trim()
+    .slice(0, 180);
+  if (!query) return [{ text: plain, match: false }];
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escaped})`, 'gi');
+  return plain.split(regex).filter(Boolean).map((text) => ({
+    text,
+    match: text.toLocaleLowerCase() === query.toLocaleLowerCase(),
+  }));
 };
+
+watch(() => route.query.q, (newQuery) => {
+  searchQuery.value = (newQuery as string) || '';
+  fetchResults(searchQuery.value);
+});
+
+onMounted(() => fetchResults(searchQuery.value));
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto py-4 animate-[fadeIn_0.4s_ease]">
-    <div class="flex items-center gap-4 mb-8 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-      <button @click="router.back()" class="p-2 hover:bg-slate-100 rounded-full transition-colors tooltip relative shrink-0">
-        <ArrowLeft class="w-5 h-5 text-slate-600" />
-      </button>
+  <div class="search-page">
+    <header class="search-heading">
+      <p class="eyebrow">记忆检索</p>
+      <h1>找回某个片刻</h1>
+      <p>输入文字，翻阅曾经写下的心情与故事。</p>
+    </header>
 
-      <div class="flex-1 bg-slate-50 flex items-center px-4 py-2.5 rounded-xl border border-transparent focus-within:border-indigo-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-100 transition-all">
-        <SearchIcon class="w-5 h-5 text-slate-400 mr-3 shrink-0" />
-        <input 
-          type="text" 
-          v-model="searchQuery" 
-          @keyup.enter="handleSearch"
-          placeholder="搜索日记..." 
-          class="w-full bg-transparent border-none outline-none text-slate-700 placeholder-slate-400 font-medium" 
-        />
-      </div>
+    <form class="search-box" @submit.prevent="handleSearch">
+      <SearchIcon class="h-5 w-5" />
+      <input v-model="searchQuery" type="search" autocomplete="off" autofocus placeholder="例如：旅行、生日、一个人的名字…" />
+      <button v-if="searchQuery" type="button" class="clear-button" aria-label="清空" @click="clearSearch"><X class="h-4 w-4" /></button>
+      <button type="submit" class="submit-button">搜索</button>
+    </form>
 
-      <span class="text-sm font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full whitespace-nowrap shrink-0 hidden sm:block">
-        共 {{ results.length }} 条
-      </span>
+    <div v-if="route.query.q" class="result-summary">
+      <span>“{{ route.query.q }}”</span>
+      <p>{{ loading ? '正在翻阅…' : `找到 ${results.length} 条相关记录` }}</p>
     </div>
 
-    <!-- 加载中 -->
-    <div v-if="loading" class="flex flex-col justify-center items-center py-20 space-y-4">
-      <Loader2 class="w-10 h-10 animate-spin text-indigo-500" />
-      <span class="text-slate-400 font-medium">翻阅记忆中...</span>
-    </div>
-    
-    <!-- 提示输入状态 -->
-    <div v-else-if="!route.query.q" class="text-center py-24 flex flex-col items-center text-slate-500">
-      <SearchIcon class="w-16 h-16 mb-4 text-slate-300" />
-      <p class="text-xl font-bold text-slate-400">检索日志</p>
-      <p class="text-sm mt-2 text-slate-400">输入关键字开始回忆</p>
+    <div v-if="loading" class="search-state">
+      <Loader2 class="h-7 w-7 animate-spin" />
+      <p>正在翻阅你的记录</p>
     </div>
 
-    <!-- 空状态 -->
-    <div v-else-if="results.length === 0" class="text-center py-24 flex flex-col items-center text-slate-500">
-      <Frown class="w-16 h-16 mb-4 text-slate-300" />
-      <p class="text-xl font-bold text-slate-400">检索一无所获</p>
-      <p class="text-sm mt-2 text-slate-400">换个不同的关键字寻找回忆吧</p>
+    <div v-else-if="!route.query.q" class="search-state surface-card">
+      <span><SearchIcon class="h-6 w-6" /></span>
+      <h2>从一个关键词开始</h2>
+      <p>日记正文中的每一段文字都可以被找到。</p>
     </div>
 
-    <!-- 检索结果流 -->
-    <div v-else class="space-y-5">
-      <div v-for="diary in results" :key="diary.id" 
-        @click="router.push(`/editor/${diary.date}`)"
-        class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-lg hover:shadow-indigo-100/50 hover:border-indigo-200 hover:-translate-y-1 transition-all group">
-        
-        <div class="flex items-center justify-between mb-4 border-b border-slate-50 pb-3">
-          <div class="flex items-center gap-4">
-            <span class="text-3xl bg-slate-50 w-12 h-12 flex items-center justify-center rounded-2xl group-hover:bg-indigo-50 transition-colors shadow-inner">{{ diary.mood_emoji }}</span>
-            <div class="flex flex-col">
-              <span class="text-xs font-semibold tracking-wider text-slate-400 uppercase">日期</span>
-              <span class="font-extrabold text-xl text-slate-700 group-hover:text-indigo-600 transition-colors flex items-center gap-1.5">
-                {{ diary.date }}
-              </span>
-            </div>
-          </div>
-          <CalendarDays class="w-5 h-5 text-slate-200 group-hover:text-indigo-300 transition-colors" />
+    <div v-else-if="results.length === 0" class="search-state surface-card">
+      <span><Feather class="h-6 w-6" /></span>
+      <h2>还没有找到这段记忆</h2>
+      <p>试试更短的词语，或换一种说法。</p>
+    </div>
+
+    <div v-else class="result-list">
+      <article v-for="diary in results" :key="diary.id" @click="router.push(`/diary/${diary.date}`)">
+        <div class="result-date">
+          <strong>{{ format(parseISO(diary.date), 'dd') }}</strong>
+          <span>{{ format(parseISO(diary.date), 'yyyy · MM') }}</span>
         </div>
-        
-        <p class="text-slate-600 leading-relaxed text-[15px] break-words line-clamp-3" v-html="getPreview(diary.content, route.query.q as string)"></p>
-      </div>
+        <div class="result-copy">
+          <div>
+            <time>{{ format(parseISO(diary.date), 'EEEE', { locale: zhCN }) }}</time>
+            <span>{{ diary.mood_emoji || '📝' }}</span>
+          </div>
+          <p>
+            <template v-for="(part, index) in previewParts(diary.content, route.query.q as string)" :key="index">
+              <mark v-if="part.match">{{ part.text }}</mark><template v-else>{{ part.text }}</template>
+            </template>
+          </p>
+          <small v-if="diary.images?.length">包含 {{ diary.images.length }} 张照片</small>
+        </div>
+        <ArrowRight class="result-arrow h-5 w-5" />
+      </article>
     </div>
   </div>
 </template>
+
+<style scoped>
+.search-page { max-width: 850px; margin: 0 auto; }
+.search-heading { text-align: center; }
+.search-heading h1 { margin-top: .45rem; font-family: Georgia, "Songti SC", serif; font-size: clamp(2rem, 5vw, 3rem); line-height: 1.15; letter-spacing: -.035em; }
+.search-heading > p:last-child { margin-top: .7rem; color: #858e88; font-size: .85rem; }
+.search-box { display: flex; align-items: center; gap: .75rem; margin-top: 2.3rem; border: 1px solid rgba(255,255,255,.76); border-radius: 20px; padding: .55rem .6rem .55rem 1rem; background: linear-gradient(145deg, rgba(255,255,255,.58), rgba(248,251,247,.3)); color: #849087; box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 16px 46px rgba(48,61,52,.1); backdrop-filter: blur(24px) saturate(160%); transition: all .2s; }
+.search-box:focus-within { background: rgba(255,255,255,.66); box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 18px 50px rgba(55,75,62,.13), 0 0 0 4px rgba(255,255,255,.24); }
+.search-box input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: #344038; font-size: .9rem; }
+.search-box input::-webkit-search-cancel-button { display: none; }
+.clear-button { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 9px; transition: .2s; }
+.clear-button:hover { background: rgba(255,255,255,.48); color: #435248; box-shadow: inset 0 1px 0 rgba(255,255,255,.8); }
+.submit-button { border-radius: 13px; padding: .65rem 1.15rem; background: linear-gradient(145deg, rgba(57,88,69,.94), rgba(83,117,92,.84)); border: 1px solid rgba(255,255,255,.3); color: white; font-size: .75rem; font-weight: 700; box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 8px 20px rgba(58,87,69,.18); transition: .2s; }
+.submit-button:hover { transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255,255,255,.32), 0 11px 24px rgba(58,87,69,.24); }
+.result-summary { display: flex; align-items: center; justify-content: space-between; margin: 2.2rem 0 1rem; }
+.result-summary span { color: #37453b; font-family: Georgia, "Songti SC", serif; font-size: 1.1rem; }
+.result-summary p { color: #969e98; font-size: .68rem; }
+.search-state { display: flex; min-height: 280px; flex-direction: column; align-items: center; justify-content: center; margin-top: 2rem; color: #78857c; text-align: center; }
+.search-state > span { display: grid; width: 52px; height: 52px; margin-bottom: 1rem; place-items: center; border-radius: 16px; background: rgba(255,255,255,.46); border: 1px solid rgba(255,255,255,.7); color: #587160; box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 9px 24px rgba(48,67,53,.08); }
+.search-state h2 { font-family: Georgia, "Songti SC", serif; font-size: 1.2rem; color: #3e4a42; }
+.search-state p { margin-top: .5rem; color: #929a94; font-size: .75rem; }
+.result-list { display: flex; flex-direction: column; gap: .75rem; }
+.result-list article { display: grid; grid-template-columns: 70px minmax(0,1fr) 24px; align-items: center; gap: 1rem; cursor: pointer; border: 1px solid rgba(255,255,255,.7); border-radius: 20px; padding: 1rem 1.15rem; background: linear-gradient(145deg, rgba(255,255,255,.52), rgba(248,251,247,.27)); box-shadow: inset 0 1px 0 rgba(255,255,255,.84), 0 12px 32px rgba(48,61,52,.06); backdrop-filter: blur(20px) saturate(150%); transition: all .2s; }
+.result-list article:hover { transform: translateY(-3px); background: rgba(255,255,255,.62); box-shadow: inset 0 1px 0 rgba(255,255,255,.94), 0 18px 40px rgba(48,61,52,.11); }
+.result-date { border-right: 1px solid #eceee9; text-align: center; }
+.result-date strong { display: block; font-family: Georgia, serif; font-size: 1.65rem; line-height: 1; color: #415148; }
+.result-date span { display: block; margin-top: .35rem; color: #a0a7a2; font-size: .55rem; }
+.result-copy { min-width: 0; }
+.result-copy > div { display: flex; align-items: center; gap: .5rem; }
+.result-copy time { color: #89928c; font-size: .62rem; font-weight: 600; }
+.result-copy p { margin-top: .45rem; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: #4c5750; font-family: Georgia, "Songti SC", serif; font-size: .88rem; line-height: 1.6; }
+.result-copy mark { border-radius: 3px; padding: 0 .12rem; background: #dfeadd; color: #31473a; }
+.result-copy small { display: block; margin-top: .35rem; color: #a0a7a2; font-size: .58rem; }
+.result-arrow { color: #b4bab5; transition: .2s; }
+.result-list article:hover .result-arrow { transform: translateX(3px); color: #587160; }
+@media (max-width: 640px) {
+  .search-heading { text-align: left; }
+  .search-box { margin-top: 1.6rem; }
+  .submit-button { padding-inline: .85rem; }
+  .result-list article { grid-template-columns: 50px minmax(0,1fr); gap: .8rem; padding: .9rem; }
+  .result-date strong { font-size: 1.35rem; }
+  .result-arrow { display: none; }
+}
+</style>

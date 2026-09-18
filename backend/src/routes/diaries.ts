@@ -51,6 +51,47 @@ router.get('/search', async (req: AuthRequest, res: Response): Promise<void> => 
   }
 });
 
+// 按日期倒序分页获取时间线，供首页滚动加载历史记录
+router.get('/timeline', async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user?.userId;
+  const before = typeof req.query.before === 'string' ? req.query.before : undefined;
+  const requestedLimit = Number.parseInt(String(req.query.limit || '8'), 10);
+  const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 30) : 8;
+
+  if (before && !/^\d{4}-\d{2}-\d{2}$/.test(before)) {
+    res.status(400).json({ error: 'Invalid before cursor. Use YYYY-MM-DD' });
+    return;
+  }
+
+  try {
+    const params: any[] = [userId];
+    const cursorClause = before ? `AND diary_date < $2` : '';
+    if (before) params.push(before);
+    params.push(limit + 1);
+    const limitPlaceholder = `$${params.length}`;
+
+    const result = await query(
+      `SELECT id, to_char(diary_date, 'YYYY-MM-DD') AS date, content,
+              mood_emoji, images, created_at, updated_at
+       FROM tb_diaries
+       WHERE user_id = $1 ${cursorClause}
+       ORDER BY diary_date DESC
+       LIMIT ${limitPlaceholder}`,
+      params
+    );
+
+    const hasMore = result.rows.length > limit;
+    const items = hasMore ? result.rows.slice(0, limit) : result.rows;
+    res.json({
+      items,
+      nextCursor: hasMore ? items[items.length - 1].date : null,
+    });
+  } catch (err) {
+    console.error('Timeline error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // 获取某一天的日记详细
 router.get('/:date', async (req: AuthRequest, res: Response): Promise<void> => {
   const { date } = req.params;
