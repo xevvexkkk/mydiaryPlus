@@ -9,16 +9,22 @@
 # 本地测试:
 #   docker build --platform linux/amd64 -t mydiary:1.0.0 .
 
+ARG NODE_VERSION=20
+
 # Stage 1: Build frontend
-FROM node:20-alpine AS frontend-builder
+FROM node:${NODE_VERSION}-alpine AS frontend-builder
 WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm install
+# Docker resolves native optional packages for the target architecture.
+# Do not copy a lockfile generated on the macOS development host: Vite 8's
+# Rolldown/Lightning CSS bindings are platform-specific, and a host-only lock
+# can omit the linux-musl packages required by multi-arch builds.
+COPY frontend/package.json ./
+RUN npm install --include=optional
 COPY frontend/ .
 RUN npm run build
 
 # Stage 2: Build backend
-FROM node:20-alpine
+FROM node:${NODE_VERSION}-alpine
 WORKDIR /app
 
 # Install runtime dependencies (for backup/restore/export scripts)
@@ -26,8 +32,8 @@ RUN apk add --no-cache zstd curl jq zip
 
 # Copy backend dependencies
 WORKDIR /app/backend
-COPY backend/package*.json ./
-RUN npm install
+COPY backend/package.json ./
+RUN npm install --include=optional
 
 # Copy backend source
 COPY backend/ .
