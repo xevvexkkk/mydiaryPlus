@@ -144,8 +144,8 @@ curl http://localhost:3000/api/health/ready
 网络环境无法直连 Docker Hub 时，可将两个 `image` 分别替换为：
 
 ```yaml
-image: docker.6788266.xyz/docker.io/library/postgres:15-alpine
-image: docker.6788266.xyz/docker.io/k8sk3s/mydiaryplus:latest
+image: postgres:15-alpine
+image: k8sk3s/mydiaryplus:latest
 ```
 
 > 不要提交 `secrets/`、`.env` 或数据目录。若反向代理与 Docker 不在同一主机，请通过防火墙限制 `3000` 端口仅允许代理服务器访问。
