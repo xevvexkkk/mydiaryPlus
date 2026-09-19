@@ -309,7 +309,13 @@ onBeforeUnmount(() => {
             <label class="upload-tile">
               <span><Plus class="h-5 w-5" /></span>
               <small>添加照片</small>
-              <input type="file" class="hidden" accept="image/*" @change="handleImageUpload" />
+              <input
+                type="file"
+                class="upload-input"
+                accept="image/*"
+                aria-label="从相册或相机添加照片"
+                @change="handleImageUpload"
+              />
             </label>
             <div v-for="imgUrl in imagesInContent" :key="imgUrl" class="image-tile" @click="selectedImageUrl = imgUrl">
               <img :src="imgUrl" alt="日记照片" />
@@ -373,10 +379,11 @@ onBeforeUnmount(() => {
 .gallery-heading small { color: #a0a7a2; font-size: .55rem; }
 .gallery-strip { display: flex; gap: .65rem; overflow-x: auto; padding-bottom: .2rem; }
 .upload-tile, .image-tile { flex: 0 0 92px; width: 92px; height: 92px; border-radius: 14px; }
-.upload-tile { display: flex; cursor: pointer; flex-direction: column; align-items: center; justify-content: center; gap: .45rem; border: 1px dashed #cbd3cc; color: #859188; transition: .2s; }
+.upload-tile { position: relative; display: flex; cursor: pointer; flex-direction: column; align-items: center; justify-content: center; gap: .45rem; overflow: hidden; border: 1px dashed #cbd3cc; color: #859188; transition: .2s; }
 .upload-tile:hover { border-color: #91a395; background: rgba(233,240,233,.55); color: #506858; }
 .upload-tile span { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid rgba(255,255,255,.72); border-radius: 9px; background: rgba(255,255,255,.5); box-shadow: inset 0 1px 0 rgba(255,255,255,.88); }
 .upload-tile small { font-size: .55rem; font-weight: 600; }
+.upload-input { position: absolute; inset: 0; z-index: 2; display: block; width: 100%; height: 100%; cursor: pointer; opacity: 0; -webkit-appearance: none; appearance: none; }
 .image-tile { position: relative; cursor: zoom-in; overflow: hidden; background: #eef0eb; }
 .image-tile img { width: 100%; height: 100%; object-fit: cover; transition: transform .25s; }
 .image-tile:hover img { transform: scale(1.04); }
