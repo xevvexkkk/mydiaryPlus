@@ -36,8 +36,16 @@ const loadingMore = ref(false);
 const nextCursor = ref<string | null>(null);
 const timelineLoaded = ref(false);
 const loadTrigger = ref<HTMLElement | null>(null);
-const selectedImageUrl = ref<string | null>(null);
+const previewImages = ref<string[]>([]);
+const previewIndex = ref(0);
+const selectedImageUrl = computed(() => previewImages.value[previewIndex.value] || null);
+const isPreviewOpen = computed(() => previewImages.value.length > 0);
 let timelineObserver: IntersectionObserver | null = null;
+let previewTouchStartX = 0;
+let previewTouchStartY = 0;
+let lockedScrollY = 0;
+let previewSwipeHandled = false;
+let previewSwipeResetTimer: ReturnType<typeof setTimeout> | null = null;
 
 const greeting = computed(() => {
   const hour = new Date().getHours();
@@ -110,8 +118,83 @@ const getDiaryImages = (diary: DiarySummary) => {
 };
 const formatDateLocal = (date: string) => format(parseISO(date), 'M月d日 · EEEE', { locale: zhCN });
 
+const openImagePreview = (diary: DiarySummary, index: number) => {
+  previewImages.value = getDiaryImages(diary);
+  previewIndex.value = index;
+};
+
+const closeImagePreview = () => {
+  previewImages.value = [];
+  previewIndex.value = 0;
+};
+
+const showPreviousImage = () => {
+  if (previewImages.value.length < 2) return;
+  previewIndex.value = (previewIndex.value - 1 + previewImages.value.length) % previewImages.value.length;
+};
+
+const showNextImage = () => {
+  if (previewImages.value.length < 2) return;
+  previewIndex.value = (previewIndex.value + 1) % previewImages.value.length;
+};
+
+const handlePreviewTouchStart = (event: TouchEvent) => {
+  if (previewSwipeResetTimer) clearTimeout(previewSwipeResetTimer);
+  previewSwipeHandled = false;
+  const touch = event.changedTouches[0];
+  previewTouchStartX = touch.clientX;
+  previewTouchStartY = touch.clientY;
+};
+
+const handlePreviewTouchEnd = (event: TouchEvent) => {
+  const touch = event.changedTouches[0];
+  const deltaX = touch.clientX - previewTouchStartX;
+  const deltaY = touch.clientY - previewTouchStartY;
+  if (Math.abs(deltaX) < 45 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+  previewSwipeHandled = true;
+  deltaX < 0 ? showNextImage() : showPreviousImage();
+  previewSwipeResetTimer = setTimeout(() => {
+    previewSwipeHandled = false;
+  }, 350);
+};
+
+const handlePreviewBackdropClick = () => {
+  if (!previewSwipeHandled) closeImagePreview();
+};
+
+const handlePreviewKeydown = (event: KeyboardEvent) => {
+  if (!isPreviewOpen.value) return;
+  if (event.key === 'Escape') closeImagePreview();
+  if (event.key === 'ArrowLeft') showPreviousImage();
+  if (event.key === 'ArrowRight') showNextImage();
+};
+
+watch(isPreviewOpen, (open) => {
+  const body = document.body;
+  const html = document.documentElement;
+  if (open) {
+    lockedScrollY = window.scrollY;
+    body.style.position = 'fixed';
+    body.style.top = `-${lockedScrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    html.style.overflow = 'hidden';
+    return;
+  }
+
+  body.style.position = '';
+  body.style.top = '';
+  body.style.left = '';
+  body.style.right = '';
+  body.style.width = '';
+  html.style.overflow = '';
+  window.scrollTo(0, lockedScrollY);
+});
+
 watch(currentDate, fetchMonthDiaries);
 onMounted(() => {
+  window.addEventListener('keydown', handlePreviewKeydown);
   fetchMonthDiaries();
   fetchTimeline().then(async () => {
     await nextTick();
@@ -122,7 +205,20 @@ onMounted(() => {
   });
 });
 
-onBeforeUnmount(() => timelineObserver?.disconnect());
+onBeforeUnmount(() => {
+  timelineObserver?.disconnect();
+  window.removeEventListener('keydown', handlePreviewKeydown);
+  if (previewSwipeResetTimer) clearTimeout(previewSwipeResetTimer);
+  if (isPreviewOpen.value) {
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
+    document.body.style.width = '';
+    document.documentElement.style.overflow = '';
+    window.scrollTo(0, lockedScrollY);
+  }
+});
 </script>
 
 <template>
@@ -228,7 +324,7 @@ onBeforeUnmount(() => timelineObserver?.disconnect());
                   type="button"
                   class="timeline-photo"
                   aria-label="查看日记照片"
-                  @click.stop="selectedImageUrl = image"
+                  @click.stop="openImagePreview(diary, index)"
                 >
                   <img :src="image" alt="日记照片" loading="lazy" decoding="async" />
                   <span v-if="index === 2 && getDiaryImages(diary).length > 3" class="photo-more">
@@ -255,11 +351,26 @@ onBeforeUnmount(() => timelineObserver?.disconnect());
 
     <Teleport to="body">
       <Transition name="image-preview">
-        <div v-if="selectedImageUrl" class="timeline-lightbox" @click="selectedImageUrl = null">
-          <img :src="selectedImageUrl" alt="照片预览" @click.stop />
-          <button type="button" aria-label="关闭照片预览" @click="selectedImageUrl = null">
+        <div
+          v-if="selectedImageUrl"
+          class="timeline-lightbox"
+          @click.self="handlePreviewBackdropClick"
+          @touchstart.passive="handlePreviewTouchStart"
+          @touchend.passive="handlePreviewTouchEnd"
+        >
+          <img :src="selectedImageUrl" alt="照片预览" draggable="false" @click.stop />
+          <button class="preview-close" type="button" aria-label="关闭照片预览" @click.stop="closeImagePreview">
             <X class="h-5 w-5" />
           </button>
+          <template v-if="previewImages.length > 1">
+            <button class="preview-nav previous" type="button" aria-label="查看上一张照片" @click.stop="showPreviousImage">
+              <ChevronLeft class="h-6 w-6" />
+            </button>
+            <button class="preview-nav next" type="button" aria-label="查看下一张照片" @click.stop="showNextImage">
+              <ChevronRight class="h-6 w-6" />
+            </button>
+            <span class="preview-counter">{{ previewIndex + 1 }} / {{ previewImages.length }}</span>
+          </template>
         </div>
       </Transition>
     </Teleport>
@@ -331,9 +442,14 @@ onBeforeUnmount(() => timelineObserver?.disconnect());
 .timeline-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .3s ease; }
 .timeline-list article:hover .timeline-photo img { transform: scale(1.025); }
 .photo-more { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(30,39,33,.52); color: white; font-size: 1rem; font-weight: 700; backdrop-filter: blur(2px); }
-.timeline-lightbox { position: fixed; inset: 0; z-index: 150; display: grid; place-items: center; padding: 3rem; background: rgba(24,30,26,.76); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
-.timeline-lightbox > img { max-width: 100%; max-height: 100%; border-radius: 18px; object-fit: contain; box-shadow: 0 25px 80px rgba(0,0,0,.32); }
-.timeline-lightbox > button { position: fixed; top: max(1.25rem, env(safe-area-inset-top)); right: 1.25rem; display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid rgba(255,255,255,.2); border-radius: 13px; background: rgba(255,255,255,.14); color: white; }
+.timeline-lightbox { position: fixed; inset: 0; z-index: 150; display: grid; width: 100vw; height: 100%; height: 100dvh; place-items: center; padding: 3rem 5.5rem; overflow: hidden; overscroll-behavior: none; touch-action: none; user-select: none; background: rgba(24,30,26,.76); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+.timeline-lightbox > img { display: block; min-width: 0; min-height: 0; width: auto; height: auto; max-width: calc(100vw - 11rem); max-height: calc(100vh - 6rem); max-height: calc(100dvh - 6rem); border-radius: 18px; object-fit: contain; box-shadow: 0 25px 80px rgba(0,0,0,.32); -webkit-user-drag: none; }
+.preview-close, .preview-nav { position: fixed; display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid rgba(255,255,255,.2); border-radius: 13px; background: rgba(255,255,255,.14); color: white; }
+.preview-close { top: max(1.25rem, env(safe-area-inset-top)); right: 1.25rem; }
+.preview-nav { top: 50%; width: 46px; height: 58px; transform: translateY(-50%); }
+.preview-nav.previous { left: 1.25rem; }
+.preview-nav.next { right: 1.25rem; }
+.preview-counter { position: fixed; bottom: max(1.25rem, env(safe-area-inset-bottom)); left: 50%; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: .35rem .7rem; transform: translateX(-50%); background: rgba(20,27,22,.35); color: rgba(255,255,255,.9); font-size: .7rem; font-weight: 600; backdrop-filter: blur(8px); }
 .image-preview-enter-active, .image-preview-leave-active { transition: opacity .2s ease; }
 .image-preview-enter-from, .image-preview-leave-to { opacity: 0; }
 .timeline-loader { min-height: 46px; padding: .8rem 0 .2rem 60px; color: #a0a7a2; text-align: center; font-size: .6rem; }
@@ -354,6 +470,8 @@ onBeforeUnmount(() => timelineObserver?.disconnect());
   .calendar-card { padding: 1.15rem; }
   .calendar-grid { gap: .16rem; }
   .calendar-day { border-radius: 10px; }
-  .timeline-lightbox { padding: 1rem; }
+  .timeline-lightbox { padding: max(3.5rem, env(safe-area-inset-top)) 1rem max(3.5rem, env(safe-area-inset-bottom)); }
+  .timeline-lightbox > img { max-width: calc(100vw - 2rem); max-height: calc(100vh - 7rem); max-height: calc(100dvh - 7rem); border-radius: 12px; }
+  .preview-nav { display: none; }
 }
 </style>
