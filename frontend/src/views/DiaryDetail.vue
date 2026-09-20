@@ -4,8 +4,9 @@ import { useRoute, useRouter } from 'vue-router';
 import { format, parseISO } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import MarkdownIt from 'markdown-it';
-import { ArrowLeft, CalendarDays, Image as ImageIcon, Loader2, Pencil, X } from 'lucide-vue-next';
+import { ArrowLeft, CalendarDays, Image as ImageIcon, Loader2, Pencil } from 'lucide-vue-next';
 import api from '../utils/api';
+import PhotoViewer from '../components/PhotoViewer.vue';
 
 interface DiaryEntry {
   id: number;
@@ -22,7 +23,7 @@ const date = route.params.date as string;
 const diary = ref<DiaryEntry | null>(null);
 const loading = ref(true);
 const notFound = ref(false);
-const selectedImage = ref<string | null>(null);
+const selectedImageIndex = ref<number | null>(null);
 
 const markdown = new MarkdownIt({ html: false, breaks: true, linkify: true });
 const renderedContent = computed(() => markdown.render(diary.value?.content || ''));
@@ -76,7 +77,7 @@ onMounted(fetchDiary);
         <section v-if="diary.images.length" class="detail-gallery">
           <div><ImageIcon class="h-4 w-4" /><span>这一天的照片</span></div>
           <div class="image-grid">
-            <button v-for="image in diary.images" :key="image" @click="selectedImage = image">
+            <button v-for="(image, index) in diary.images" :key="image" @click="selectedImageIndex = index">
               <img :src="image" alt="日记照片" />
             </button>
           </div>
@@ -84,12 +85,12 @@ onMounted(fetchDiary);
       </article>
     </template>
 
-    <Transition name="lightbox">
-      <div v-if="selectedImage" class="detail-lightbox" @click="selectedImage = null">
-        <img :src="selectedImage" alt="照片预览" @click.stop />
-        <button aria-label="关闭预览" @click="selectedImage = null"><X class="h-5 w-5" /></button>
-      </div>
-    </Transition>
+    <PhotoViewer
+      v-if="diary && selectedImageIndex !== null"
+      :images="diary.images"
+      :initial-index="selectedImageIndex"
+      @close="selectedImageIndex = null"
+    />
   </div>
 </template>
 
@@ -132,15 +133,9 @@ onMounted(fetchDiary);
 .empty-detail h1 { margin-top: .5rem; font-family: Georgia, "Songti SC", serif; font-size: 1.5rem; }
 .empty-detail > p:not(.eyebrow) { margin: .7rem 0 1.2rem; color: #909893; font-size: .75rem; }
 .empty-detail > button { display: flex; align-items: center; gap: .4rem; border-radius: 11px; padding: .7rem 1rem; background: #405d4a; color: white; font-size: .7rem; font-weight: 700; }
-.detail-lightbox { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 3rem; background: rgba(28,34,30,.72); backdrop-filter: blur(16px); }
-.detail-lightbox img { max-width: 100%; max-height: 100%; border-radius: 18px; box-shadow: 0 25px 80px rgba(0,0,0,.3); }
-.detail-lightbox button { position: fixed; top: 1.5rem; right: 1.5rem; display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; background: rgba(255,255,255,.16); color: white; }
-.lightbox-enter-active, .lightbox-leave-active { transition: opacity .2s ease; }
-.lightbox-enter-from, .lightbox-leave-to { opacity: 0; }
 @media (max-width: 640px) {
   .detail-header { margin-top: -.5rem; }
   .diary-sheet { min-height: calc(100vh - 10rem); padding: 2rem 1.35rem; }
   .image-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
-  .detail-lightbox { padding: 1rem; }
 }
 </style>

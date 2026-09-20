@@ -5,6 +5,7 @@ import api from '../utils/api';
 import { Plus, X, Loader2, CloudCheck, CloudUpload, CloudOff, AlertCircle, ChevronDown, Image as ImageIcon } from 'lucide-vue-next';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+import PhotoViewer from '../components/PhotoViewer.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -13,7 +14,7 @@ const dateStr = route.params.date as string;
 const content = ref('');
 const emoji = ref('📝');
 const uploadedImages = ref<string[]>([]);
-const selectedImageUrl = ref<string | null>(null);
+const selectedImageIndex = ref<number | null>(null);
 const loading = ref(false);
 const showMoodPicker = ref(false);
 const uploadError = ref('');
@@ -337,7 +338,12 @@ onBeforeUnmount(() => {
                 @change="handleImageUpload"
               />
             </label>
-            <div v-for="imgUrl in imagesInContent" :key="imgUrl" class="image-tile" @click="selectedImageUrl = imgUrl">
+            <div
+              v-for="(imgUrl, index) in imagesInContent"
+              :key="imgUrl"
+              class="image-tile"
+              @click="selectedImageIndex = index"
+            >
               <img :src="imgUrl" alt="日记照片" />
               <button aria-label="删除照片" @click.stop="removeImage(imgUrl)"><X class="h-3.5 w-3.5" /></button>
             </div>
@@ -346,12 +352,12 @@ onBeforeUnmount(() => {
       </main>
     </template>
 
-    <Transition name="lightbox">
-      <div v-if="selectedImageUrl" class="lightbox" @click="selectedImageUrl = null">
-        <img :src="selectedImageUrl" alt="照片预览" @click.stop />
-        <button aria-label="关闭预览" @click="selectedImageUrl = null"><X class="h-5 w-5" /></button>
-      </div>
-    </Transition>
+    <PhotoViewer
+      v-if="selectedImageIndex !== null"
+      :images="imagesInContent"
+      :initial-index="selectedImageIndex"
+      @close="selectedImageIndex = null"
+    />
   </div>
 </template>
 
@@ -410,13 +416,9 @@ onBeforeUnmount(() => {
 .image-tile:hover img { transform: scale(1.04); }
 .image-tile button { position: absolute; top: .35rem; right: .35rem; display: grid; width: 25px; height: 25px; place-items: center; border-radius: 8px; background: rgba(26,32,28,.55); color: white; opacity: 0; backdrop-filter: blur(5px); transition: .2s; }
 .image-tile:hover button, .image-tile button:focus { opacity: 1; }
-.lightbox { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 3rem; background: rgba(28,34,30,.72); backdrop-filter: blur(16px); }
-.lightbox img { max-width: 100%; max-height: 100%; border-radius: 18px; box-shadow: 0 25px 80px rgba(0,0,0,.3); }
-.lightbox button { position: fixed; top: 1.5rem; right: 1.5rem; display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; background: rgba(255,255,255,.16); color: white; }
-.mood-pop-enter-active, .mood-pop-leave-active, .draft-enter-active, .draft-leave-active, .lightbox-enter-active, .lightbox-leave-active { transition: all .2s ease; }
+.mood-pop-enter-active, .mood-pop-leave-active, .draft-enter-active, .draft-leave-active { transition: all .2s ease; }
 .mood-pop-enter-from, .mood-pop-leave-to { opacity: 0; transform: translateY(-5px) scale(.98); }
 .draft-enter-from, .draft-leave-to { opacity: 0; transform: translateY(-5px); }
-.lightbox-enter-from, .lightbox-leave-to { opacity: 0; }
 @media (max-width: 640px) {
   .editor-heading { display: none; }
   .writing-paper { min-height: calc(100vh - 7rem); margin: -.5rem; border-radius: 20px; padding-inline: 1.25rem; }
@@ -424,7 +426,6 @@ onBeforeUnmount(() => {
   .mood-picker { width: min(300px, calc(100vw - 3rem)); }
   .draft-notice { grid-template-columns: auto 1fr auto; }
   .draft-notice > button:not(.restore) { display: none; }
-  .lightbox { padding: 1rem; }
   .image-tile button { opacity: 1; }
 }
 </style>
