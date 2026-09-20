@@ -16,6 +16,7 @@ const uploadedImages = ref<string[]>([]);
 const selectedImageUrl = ref<string | null>(null);
 const loading = ref(false);
 const showMoodPicker = ref(false);
+const uploadError = ref('');
 
 // 同步状态：'synced' | 'syncing' | 'cached' | 'error'
 const syncStatus = ref<'synced' | 'syncing' | 'cached' | 'error'>('synced');
@@ -148,23 +149,38 @@ watch([content, emoji, uploadedImages], () => {
 }, { deep: true });
 
 const handleImageUpload = async (e: Event) => {
-  const file = (e.target as HTMLInputElement).files?.[0];
-  if (!file) return;
+  const input = e.target as HTMLInputElement;
+  const files = Array.from(input.files || []);
+  if (!files.length) return;
 
-  const formData = new FormData();
-  formData.append('image', file);
+  uploadError.value = '';
+  const uploadedUrls: string[] = [];
+  let failedCount = 0;
 
-  try {
-    const res = await api.post('/upload/image', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-    const url = res.data.url;
-    uploadedImages.value.push(url);
-  } catch (err) {
-    console.error('Image upload failed', err);
+  for (const file of files) {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const res = await api.post('/upload/image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      uploadedUrls.push(res.data.url);
+    } catch (err) {
+      console.error(`Image upload failed: ${file.name}`, err);
+      failedCount += 1;
+    }
+  }
+
+  if (uploadedUrls.length) {
+    uploadedImages.value.push(...uploadedUrls);
+  }
+  if (failedCount) {
+    uploadError.value = `${failedCount} 张照片上传失败，请重新选择后再试`;
     syncStatus.value = 'error';
   }
-  (e.target as HTMLInputElement).value = '';
+
+  input.value = '';
 };
 
 const removeImage = async (url: string) => {
@@ -305,6 +321,9 @@ onBeforeUnmount(() => {
             <div><ImageIcon class="h-4 w-4" /><span>照片记忆</span></div>
             <small>{{ imagesInContent.length ? `${imagesInContent.length} 张` : '添加今天的画面' }}</small>
           </div>
+          <p v-if="uploadError" class="upload-error">
+            <AlertCircle class="h-3.5 w-3.5" />{{ uploadError }}
+          </p>
           <div class="gallery-strip hide-scrollbar">
             <label class="upload-tile">
               <span><Plus class="h-5 w-5" /></span>
@@ -313,6 +332,7 @@ onBeforeUnmount(() => {
                 type="file"
                 class="upload-input"
                 accept="image/*"
+                multiple
                 aria-label="从相册或相机添加照片"
                 @change="handleImageUpload"
               />
@@ -377,6 +397,7 @@ onBeforeUnmount(() => {
 .gallery-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: .8rem; }
 .gallery-heading > div { display: flex; align-items: center; gap: .45rem; color: #65726a; font-size: .65rem; font-weight: 700; }
 .gallery-heading small { color: #a0a7a2; font-size: .55rem; }
+.upload-error { display: flex; align-items: center; gap: .35rem; margin: -.25rem 0 .75rem; color: #ad554e; font-size: .6rem; }
 .gallery-strip { display: flex; gap: .65rem; overflow-x: auto; padding-bottom: .2rem; }
 .upload-tile, .image-tile { flex: 0 0 92px; width: 92px; height: 92px; border-radius: 14px; }
 .upload-tile { position: relative; display: flex; cursor: pointer; flex-direction: column; align-items: center; justify-content: center; gap: .45rem; overflow: hidden; border: 1px dashed #cbd3cc; color: #859188; transition: .2s; }

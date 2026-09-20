@@ -100,6 +100,13 @@ const getPreview = (content: string) => {
   const text = (content || '').replace(/!\[.*?\]\(.*?\)/g, '').replace(/[#*`_>\[\]]/g, '').trim();
   return text || '这一天只留下了一个心情。';
 };
+const getDiaryImages = (diary: DiarySummary) => {
+  const storedImages = Array.isArray(diary.images) ? diary.images : [];
+  const markdownImages = Array.from((diary.content || '').matchAll(/!\[.*?\]\((.*?)\)/g))
+    .map(match => match[1])
+    .filter(Boolean);
+  return Array.from(new Set([...storedImages, ...markdownImages]));
+};
 const formatDateLocal = (date: string) => format(parseISO(date), 'M月d日 · EEEE', { locale: zhCN });
 
 watch(currentDate, fetchMonthDiaries);
@@ -210,7 +217,21 @@ onBeforeUnmount(() => timelineObserver?.disconnect());
                 <span class="mood-chip">{{ diary.mood_emoji || '📝' }}</span>
               </div>
               <p>{{ getPreview(diary.content) }}</p>
-              <div v-if="diary.images?.length" class="entry-meta">{{ diary.images.length }} 张照片</div>
+              <div
+                v-if="getDiaryImages(diary).length"
+                :class="['timeline-gallery', `photos-${Math.min(getDiaryImages(diary).length, 3)}`]"
+              >
+                <div
+                  v-for="(image, index) in getDiaryImages(diary).slice(0, 3)"
+                  :key="image"
+                  class="timeline-photo"
+                >
+                  <img :src="image" alt="日记照片" loading="lazy" decoding="async" />
+                  <span v-if="index === 2 && getDiaryImages(diary).length > 3" class="photo-more">
+                    +{{ getDiaryImages(diary).length - 3 }}
+                  </span>
+                </div>
+              </div>
             </div>
           </article>
           <div ref="loadTrigger" class="timeline-loader">
@@ -285,7 +306,16 @@ onBeforeUnmount(() => timelineObserver?.disconnect());
 .timeline-content time { color: #929994; font-size: .62rem; font-weight: 600; }
 .timeline-content p { margin-top: .45rem; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: #4e5851; font-family: Georgia, "Songti SC", serif; font-size: .88rem; line-height: 1.65; }
 .mood-chip { display: grid; width: 27px; height: 27px; place-items: center; border-radius: 9px; background: rgba(255,255,255,.46); border: 1px solid rgba(255,255,255,.66); box-shadow: inset 0 1px 0 rgba(255,255,255,.8); font-size: .85rem; }
-.entry-meta { margin-top: .5rem; color: #9aa19c; font-size: .6rem; }
+.timeline-gallery { display: grid; gap: .35rem; overflow: hidden; margin-top: .7rem; border-radius: 13px; }
+.timeline-gallery.photos-1 { grid-template-columns: 1fr; }
+.timeline-gallery.photos-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.timeline-gallery.photos-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.timeline-photo { position: relative; overflow: hidden; aspect-ratio: 1; background: #e9ede8; }
+.photos-1 .timeline-photo { aspect-ratio: 16 / 9; max-height: 190px; }
+.photos-2 .timeline-photo { aspect-ratio: 4 / 3; }
+.timeline-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .3s ease; }
+.timeline-list article:hover .timeline-photo img { transform: scale(1.025); }
+.photo-more { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(30,39,33,.52); color: white; font-size: 1rem; font-weight: 700; backdrop-filter: blur(2px); }
 .timeline-loader { min-height: 46px; padding: .8rem 0 .2rem 60px; color: #a0a7a2; text-align: center; font-size: .6rem; }
 .timeline-loader > span { display: inline-flex; align-items: center; gap: .45rem; }
 .loader-dot { width: 7px; height: 7px; border-radius: 50%; background: #718877; animation: pulse 1.1s ease-in-out infinite; }
