@@ -13,7 +13,7 @@ import {
   parseISO,
 } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
-import { ArrowRight, ChevronLeft, ChevronRight, Feather, Search, Sparkles } from 'lucide-vue-next';
+import { ArrowRight, ChevronLeft, ChevronRight, Feather, Search, Sparkles, X } from 'lucide-vue-next';
 import api from '../utils/api';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
@@ -36,6 +36,7 @@ const loadingMore = ref(false);
 const nextCursor = ref<string | null>(null);
 const timelineLoaded = ref(false);
 const loadTrigger = ref<HTMLElement | null>(null);
+const selectedImageUrl = ref<string | null>(null);
 let timelineObserver: IntersectionObserver | null = null;
 
 const greeting = computed(() => {
@@ -221,16 +222,19 @@ onBeforeUnmount(() => timelineObserver?.disconnect());
                 v-if="getDiaryImages(diary).length"
                 :class="['timeline-gallery', `photos-${Math.min(getDiaryImages(diary).length, 3)}`]"
               >
-                <div
+                <button
                   v-for="(image, index) in getDiaryImages(diary).slice(0, 3)"
                   :key="image"
+                  type="button"
                   class="timeline-photo"
+                  aria-label="查看日记照片"
+                  @click.stop="selectedImageUrl = image"
                 >
                   <img :src="image" alt="日记照片" loading="lazy" decoding="async" />
                   <span v-if="index === 2 && getDiaryImages(diary).length > 3" class="photo-more">
                     +{{ getDiaryImages(diary).length - 3 }}
                   </span>
-                </div>
+                </button>
               </div>
             </div>
           </article>
@@ -248,6 +252,17 @@ onBeforeUnmount(() => timelineObserver?.disconnect());
         </div>
       </section>
     </div>
+
+    <Teleport to="body">
+      <Transition name="image-preview">
+        <div v-if="selectedImageUrl" class="timeline-lightbox" @click="selectedImageUrl = null">
+          <img :src="selectedImageUrl" alt="照片预览" @click.stop />
+          <button type="button" aria-label="关闭照片预览" @click="selectedImageUrl = null">
+            <X class="h-5 w-5" />
+          </button>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -310,12 +325,17 @@ onBeforeUnmount(() => timelineObserver?.disconnect());
 .timeline-gallery.photos-1 { grid-template-columns: 1fr; }
 .timeline-gallery.photos-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .timeline-gallery.photos-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.timeline-photo { position: relative; overflow: hidden; aspect-ratio: 1; background: #e9ede8; }
+.timeline-photo { position: relative; display: block; overflow: hidden; width: 100%; aspect-ratio: 1; background: #e9ede8; cursor: zoom-in; }
 .photos-1 .timeline-photo { aspect-ratio: 16 / 9; max-height: 190px; }
 .photos-2 .timeline-photo { aspect-ratio: 4 / 3; }
 .timeline-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .3s ease; }
 .timeline-list article:hover .timeline-photo img { transform: scale(1.025); }
 .photo-more { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(30,39,33,.52); color: white; font-size: 1rem; font-weight: 700; backdrop-filter: blur(2px); }
+.timeline-lightbox { position: fixed; inset: 0; z-index: 150; display: grid; place-items: center; padding: 3rem; background: rgba(24,30,26,.76); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+.timeline-lightbox > img { max-width: 100%; max-height: 100%; border-radius: 18px; object-fit: contain; box-shadow: 0 25px 80px rgba(0,0,0,.32); }
+.timeline-lightbox > button { position: fixed; top: max(1.25rem, env(safe-area-inset-top)); right: 1.25rem; display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid rgba(255,255,255,.2); border-radius: 13px; background: rgba(255,255,255,.14); color: white; }
+.image-preview-enter-active, .image-preview-leave-active { transition: opacity .2s ease; }
+.image-preview-enter-from, .image-preview-leave-to { opacity: 0; }
 .timeline-loader { min-height: 46px; padding: .8rem 0 .2rem 60px; color: #a0a7a2; text-align: center; font-size: .6rem; }
 .timeline-loader > span { display: inline-flex; align-items: center; gap: .45rem; }
 .loader-dot { width: 7px; height: 7px; border-radius: 50%; background: #718877; animation: pulse 1.1s ease-in-out infinite; }
@@ -334,5 +354,6 @@ onBeforeUnmount(() => timelineObserver?.disconnect());
   .calendar-card { padding: 1.15rem; }
   .calendar-grid { gap: .16rem; }
   .calendar-day { border-radius: 10px; }
+  .timeline-lightbox { padding: 1rem; }
 }
 </style>
