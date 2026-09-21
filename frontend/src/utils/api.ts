@@ -8,14 +8,44 @@ const api = axios.create({
 // CSRF token handling: read XSRF-TOKEN cookie and set header for state-changing requests
 function getCsrfToken(): string | null {
   const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : null;
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
 }
 
-api.interceptors.request.use((config) => {
+let csrfRefreshPromise: Promise<string> | null = null;
+
+async function ensureCsrfToken(): Promise<string> {
+  const existingToken = getCsrfToken();
+  if (existingToken) return existingToken;
+
+  if (!csrfRefreshPromise) {
+    csrfRefreshPromise = axios
+      .get('/api/csrf-token', {
+        withCredentials: true,
+        headers: { 'Cache-Control': 'no-cache' },
+      })
+      .then(() => {
+        const refreshedToken = getCsrfToken();
+        if (!refreshedToken) throw new Error('CSRF token cookie was not set');
+        return refreshedToken;
+      })
+      .finally(() => {
+        csrfRefreshPromise = null;
+      });
+  }
+
+  return csrfRefreshPromise;
+}
+
+api.interceptors.request.use(async (config) => {
   // Attach CSRF token for state-changing methods
   if (config.method && !['get', 'head', 'options'].includes(config.method)) {
-    const csrfToken = getCsrfToken();
-    if (csrfToken && config.headers) {
+    const csrfToken = await ensureCsrfToken();
+    if (config.headers) {
       config.headers['X-CSRF-Token'] = csrfToken;
     }
   }

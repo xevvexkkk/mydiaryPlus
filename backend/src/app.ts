@@ -52,13 +52,17 @@ app.use('/uploads', authenticate, express.static(path.join(__dirname, '../../upl
 
 // ── CSRF token endpoint ────────────────────────────────────────────
 app.get('/api/csrf-token', (req, res) => {
+  res.set('Cache-Control', 'no-store');
   setCsrfCookie(res);
   res.json({ message: 'CSRF cookie set' });
 });
 
 // ── Routes ─────────────────────────────────────────────────────────
 // Auth routes: CSRF applied per-route in auth.ts (login/register are exempt)
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', (_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+}, authRoutes);
 app.use('/api/diaries', csrfProtection, diaryRoutes);
 app.use('/api/upload', csrfProtection, uploadRoutes);
 app.use('/api/attachments', csrfProtection, attachmentRoutes);

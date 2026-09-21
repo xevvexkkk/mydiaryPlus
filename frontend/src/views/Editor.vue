@@ -18,6 +18,7 @@ const selectedImageIndex = ref<number | null>(null);
 const loading = ref(false);
 const showMoodPicker = ref(false);
 const uploadError = ref('');
+const syncError = ref('');
 
 // 同步状态：'synced' | 'syncing' | 'cached' | 'error'
 const syncStatus = ref<'synced' | 'syncing' | 'cached' | 'error'>('synced');
@@ -119,6 +120,7 @@ const triggerAutosave = () => {
   if (autosaveTimer) clearTimeout(autosaveTimer);
   
   syncStatus.value = 'syncing';
+  syncError.value = '';
   saveLocalDraft();
 
   autosaveTimer = setTimeout(async () => {
@@ -136,8 +138,9 @@ const triggerAutosave = () => {
       });
       syncStatus.value = 'synced';
       // 同步成功后可以清除旧缓存，或者保持直到页面关闭
-    } catch (err) {
+    } catch (err: any) {
       console.error('Autosave failed:', err);
+      syncError.value = err.response?.data?.error || err.message || '请求未能发出';
       syncStatus.value = 'error';
     }
   }, 2000);
@@ -163,12 +166,12 @@ const handleImageUpload = async (e: Event) => {
     formData.append('image', file);
 
     try {
-      const res = await api.post('/upload/image', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await api.post('/upload/image', formData);
       uploadedUrls.push(res.data.url);
-    } catch (err) {
+    } catch (err: any) {
       console.error(`Image upload failed: ${file.name}`, err);
+      const reason = err.response?.data?.error || err.message;
+      if (reason) uploadError.value = reason;
       failedCount += 1;
     }
   }
@@ -177,8 +180,7 @@ const handleImageUpload = async (e: Event) => {
     uploadedImages.value.push(...uploadedUrls);
   }
   if (failedCount) {
-    uploadError.value = `${failedCount} 张照片上传失败，请重新选择后再试`;
-    syncStatus.value = 'error';
+    uploadError.value = `${failedCount} 张照片上传失败：${uploadError.value || '请重新选择后再试'}`;
   }
 
   input.value = '';
@@ -264,7 +266,7 @@ onBeforeUnmount(() => {
             <h1>{{ displayDate }}</h1>
           </div>
         </div>
-        <div :class="['sync-state', syncStatus]">
+        <div :class="['sync-state', syncStatus]" :title="syncError">
           <CloudCheck v-if="syncStatus === 'synced'" class="h-4 w-4" />
           <Loader2 v-else-if="syncStatus === 'syncing'" class="h-4 w-4 animate-spin" />
           <CloudOff v-else-if="syncStatus === 'cached'" class="h-4 w-4" />
@@ -272,6 +274,12 @@ onBeforeUnmount(() => {
           {{ syncLabel }}
         </div>
       </header>
+
+      <div v-if="syncStatus === 'error' && syncError" class="save-error-notice">
+        <AlertCircle class="h-4 w-4" />
+        <span>保存失败：{{ syncError }}</span>
+        <button type="button" @click="triggerAutosave">重试</button>
+      </div>
 
       <Transition name="draft">
         <div v-if="showRestoreModal" class="draft-notice">
@@ -374,6 +382,9 @@ onBeforeUnmount(() => {
 .sync-state { display: flex; align-items: center; gap: .4rem; border: 1px solid rgba(255,255,255,.72); border-radius: 999px; padding: .45rem .7rem; background: rgba(255,255,255,.4); color: #728078; font-size: .62rem; font-weight: 600; box-shadow: inset 0 1px 0 rgba(255,255,255,.88), 0 9px 24px rgba(48,66,53,.07); backdrop-filter: blur(16px) saturate(150%); }
 .sync-state.error { border-color: #f0ccc7; color: #ad554e; }
 .sync-state.cached { color: #8a8171; }
+.save-error-notice { display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem; border: 1px solid #f0ccc7; border-radius: 13px; padding: .65rem .8rem; background: rgba(255,240,238,.78); color: #a34d47; font-size: .65rem; }
+.save-error-notice span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.save-error-notice button { flex: 0 0 auto; border-radius: 8px; padding: .35rem .55rem; background: rgba(255,255,255,.65); font-weight: 700; }
 .draft-notice { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: .75rem; margin-bottom: 1rem; border: 1px solid rgba(255,255,255,.72); border-radius: 18px; padding: .8rem; background: linear-gradient(145deg, rgba(242,249,242,.62), rgba(255,255,255,.32)); box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 14px 36px rgba(48,61,52,.09); backdrop-filter: blur(22px) saturate(155%); }
 .draft-notice > span { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid rgba(255,255,255,.72); border-radius: 11px; background: rgba(255,255,255,.48); color: #58705f; box-shadow: inset 0 1px 0 rgba(255,255,255,.9); }
 .draft-notice strong { display: block; color: #405047; font-size: .72rem; }
