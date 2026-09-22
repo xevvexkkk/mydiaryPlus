@@ -14,6 +14,7 @@ const dateStr = route.params.date as string;
 const content = ref('');
 const emoji = ref('📝');
 const uploadedImages = ref<string[]>([]);
+const imageInput = ref<HTMLInputElement | null>(null);
 const selectedImageIndex = ref<number | null>(null);
 const loading = ref(false);
 const showMoodPicker = ref(false);
@@ -151,6 +152,29 @@ watch([content, emoji, uploadedImages], () => {
   if (loading.value) return; // 加载时不触发
   triggerAutosave();
 }, { deep: true });
+
+const openImagePicker = () => {
+  const input = imageInput.value;
+  if (!input) return;
+  uploadError.value = '';
+
+  try {
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+    } else {
+      input.click();
+    }
+  } catch (error) {
+    // Older iOS/WebView builds may expose showPicker but reject it. A click
+    // issued in the same user gesture is the most compatible fallback.
+    try {
+      input.click();
+    } catch {
+      console.error('Unable to open image picker:', error);
+      uploadError.value = '无法打开系统照片选择器，请尝试使用系统浏览器访问';
+    }
+  }
+};
 
 const handleImageUpload = async (e: Event) => {
   const input = e.target as HTMLInputElement;
@@ -334,18 +358,19 @@ onBeforeUnmount(() => {
             <AlertCircle class="h-3.5 w-3.5" />{{ uploadError }}
           </p>
           <div class="gallery-strip hide-scrollbar">
-            <label class="upload-tile">
+            <button type="button" class="upload-tile" @click="openImagePicker">
               <span><Plus class="h-5 w-5" /></span>
               <small>添加照片</small>
-              <input
-                type="file"
-                class="upload-input"
-                accept="image/*"
-                multiple
-                aria-label="从相册或相机添加照片"
-                @change="handleImageUpload"
-              />
-            </label>
+            </button>
+            <input
+              ref="imageInput"
+              type="file"
+              class="upload-input"
+              accept="image/*"
+              multiple
+              aria-label="从相册或相机添加照片"
+              @change="handleImageUpload"
+            />
             <div
               v-for="(imgUrl, index) in imagesInContent"
               :key="imgUrl"
@@ -421,7 +446,7 @@ onBeforeUnmount(() => {
 .upload-tile:hover { border-color: #91a395; background: rgba(233,240,233,.55); color: #506858; }
 .upload-tile span { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid rgba(255,255,255,.72); border-radius: 9px; background: rgba(255,255,255,.5); box-shadow: inset 0 1px 0 rgba(255,255,255,.88); }
 .upload-tile small { font-size: .55rem; font-weight: 600; }
-.upload-input { position: absolute; inset: 0; z-index: 2; display: block; width: 100%; height: 100%; cursor: pointer; opacity: 0; -webkit-appearance: none; appearance: none; }
+.upload-input { position: fixed; top: 0; left: 0; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
 .image-tile { position: relative; cursor: zoom-in; overflow: hidden; background: #eef0eb; }
 .image-tile img { width: 100%; height: 100%; object-fit: cover; transition: transform .25s; }
 .image-tile:hover img { transform: scale(1.04); }
